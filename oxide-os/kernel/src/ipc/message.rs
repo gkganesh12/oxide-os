@@ -79,6 +79,16 @@ pub fn send(
             .map_err(|_| IpcError::CapabilityDenied)?;
     }
 
+    // Handle capability transfer (delegate cap to recipient)
+    if let Some(transfer_cap_id) = cap_transfer {
+        let mut table = CAP_TABLE.lock();
+        let perms = table.get(transfer_cap_id)
+            .map_err(|_| IpcError::InvalidCapTransfer)?
+            .permissions;
+        table.delegate(transfer_cap_id, sender, recipient, perms, None)
+            .map_err(|_| IpcError::InvalidCapTransfer)?;
+    }
+
     let msg_id = next_message_id();
     let msg = Message {
         id: msg_id,

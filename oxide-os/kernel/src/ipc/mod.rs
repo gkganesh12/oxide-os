@@ -1,6 +1,7 @@
 pub mod message;
 pub mod shared_memory;
 pub mod channel;
+pub mod request_reply;
 
 use crate::task::TaskId;
 use crate::capability::CapId;

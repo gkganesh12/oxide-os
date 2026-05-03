@@ -42,6 +42,11 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     apic::eoi();
     // Signal that a reschedule is needed — actual switch happens outside ISR
     crate::task::scheduler::timer_tick();
+
+    // Check for IPC request timeouts every 50 ticks
+    if TIMER_TICKS.load(Ordering::Relaxed) % 50 == 0 {
+        crate::ipc::request_reply::check_timeouts();
+    }
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
