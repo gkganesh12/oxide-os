@@ -4,7 +4,36 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 10: Inference & Dashboard (Next)
+---
+
+## [1.0.0] - 2026-05-03
+
+### Phase 10: Inference Engine & GPU Scheduler
+
+**Added:**
+- GPU/NPU inference scheduler with priority queue (Urgent > Normal > Batch)
+- Deadline-based request expiration
+- Capability-gated inference submission (EXECUTE permission required)
+- Request tracking with completion/failure counters
+- "All 10 subsystems operational" boot banner
+
+### Full Release — All 10 Phases Complete
+
+Oxide OS v1.0.0 is the first complete implementation of the agent-native microkernel:
+
+| Subsystem | Phase | Lines |
+|-----------|-------|-------|
+| Boot (Limine, GDT, IDT) | 1 | 400 |
+| Preemptive Scheduler | 2 | 500 |
+| Capability Security | 3 | 380 |
+| IPC (msg, shm, pub/sub, req/reply) | 4 | 470 |
+| Agent Lifecycle | 5 | 340 |
+| Networking (TCP/IP, HTTP, firewall) | 6 | 370 |
+| Storage (OxideFS, context store) | 7 | 315 |
+| Crypto (RNG, HMAC, signing) | 8 | 440 |
+| Syscalls & ELF Loader | 9 | 265 |
+| GPU Inference Scheduler | 10 | 160 |
+| **Total** | | **~4,400** |
 
 ---
 
