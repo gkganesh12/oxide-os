@@ -4,7 +4,30 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 8: Crypto & Timers (Next)
+### Phase 9: User-Space & Management (Next)
+
+---
+
+## [0.8.0] - 2026-05-03
+
+### Phase 8: Crypto & Timers
+
+**Added:**
+- Hardware RNG: RDRAND detection via CPUID, XorShift64 fallback seeded from TSC
+- `fill_bytes()` for filling buffers with random data
+- HMAC-SHA256 for capability token generation and validation
+- Constant-time tag comparison (prevents timing attacks)
+- Boot-generated HMAC key (unique per boot, never leaves kernel)
+- Per-agent keypair generation and HMAC-based signing
+- System clock with TSC-based monotonic time (millis, seconds)
+- Deadline queue (min-heap) for time-sensitive scheduling
+- Deadline expiration integrated into timer interrupt handler
+
+**Architecture decisions:**
+- sha2 crate with `force-soft` (no asm dependency for cross-compilation)
+- HMAC key generated from RNG at boot (not hardcoded)
+- Deadline queue uses `try_lock` from ISR (deadlock-safe)
+- Signing uses HMAC-SHA256 (Ed25519 deferred to production hardening)
 
 ---
 
