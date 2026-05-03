@@ -41,7 +41,13 @@ iso: kernel $(LIMINE_DIR)
 run: iso
 	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown
 
+# Run in QEMU with test exit device (for automated testing)
+test: iso
+	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+		-display none
+
 # Clean build artifacts
 clean:
-	cd kernel && cargo clean
+	cargo clean
 	rm -rf iso_root $(ISO)

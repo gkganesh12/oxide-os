@@ -8,6 +8,7 @@ mod allocator;
 mod gdt;
 mod interrupts;
 mod memory;
+mod qemu;
 mod serial;
 
 use core::panic::PanicInfo;
@@ -53,54 +54,46 @@ fn panic(info: &PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    // Write to QEMU debug exit port to confirm kernel entry
-    unsafe {
-        core::arch::asm!("out dx, al", in("dx") 0xf4u16, in("al") 0x21u8);
-    }
-
-    // Initialize serial output first so we can print diagnostics.
     serial::init();
 
-    println!("=== Oxide OS v0.1.0 ===");
+    println!();
+    println!("  ╔══════════════════════════════════════╗");
+    println!("  ║        Oxide OS v0.1.0               ║");
+    println!("  ║   Agent-Native Microkernel (Rust)    ║");
+    println!("  ╚══════════════════════════════════════╝");
+    println!();
 
-    // Verify the bootloader supports our requested base revision.
-    if !BASE_REVISION.is_supported() {
-        println!("[boot] ERROR: Limine base revision not supported!");
-        hcf();
-    }
-    println!("[boot] Limine base revision supported.");
+    assert!(BASE_REVISION.is_supported());
+    println!("[boot] Limine protocol OK");
 
     gdt::init();
-    println!("[boot] GDT initialized.");
+    println!("[boot] GDT loaded");
 
     interrupts::init();
-    println!("[boot] IDT initialized.");
+    println!("[boot] IDT loaded");
 
-    // Initialize memory subsystem.
     let hhdm_offset = HHDM_REQUEST.response()
         .expect("HHDM response missing")
         .offset;
 
     if let Some(response) = MEMMAP_REQUEST.response() {
-        let entries = response.entries();
-        println!("[boot] Memory map: {} entries.", entries.len());
-        memory::frame_allocator::init(entries, hhdm_offset);
+        memory::frame_allocator::init(response.entries(), hhdm_offset);
     } else {
         panic!("Memory map not available");
     }
 
     let mut mapper = unsafe { memory::paging::init(hhdm_offset) };
-    println!("[boot] Page tables initialized.");
+    println!("[boot] Page tables ready");
 
     allocator::init(&mut mapper);
 
-    println!("[boot] Kernel halted.");
-    hcf();
-}
+    println!();
+    println!("[boot] Phase 1 complete — kernel foundation operational");
+    println!("[boot] Awaiting Phase 2: Scheduler & Interrupts");
+    println!();
 
-/// Halt and catch fire: disable interrupts and loop forever.
-fn hcf() -> ! {
+    // Halt the CPU in a low-power loop
     loop {
-        core::hint::spin_loop();
+        x86_64::instructions::hlt();
     }
 }
