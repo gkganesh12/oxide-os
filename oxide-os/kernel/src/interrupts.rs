@@ -1,7 +1,13 @@
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use spin::Lazy;
+use core::sync::atomic::{AtomicU64, Ordering};
 use crate::gdt;
+use crate::apic;
 use crate::println;
+
+pub const TIMER_VECTOR: u8 = 32;
+
+static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
 
 static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     let mut idt = InterruptDescriptorTable::new();
@@ -16,11 +22,24 @@ static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     idt.general_protection_fault.set_handler_fn(general_protection_handler);
     idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
 
+    // Timer interrupt at vector 32
+    idt[32].set_handler_fn(timer_handler);
+
     idt
 });
 
 pub fn init() {
     IDT.load();
+}
+
+/// Get the number of timer ticks since boot.
+pub fn ticks() -> u64 {
+    TIMER_TICKS.load(Ordering::Relaxed)
+}
+
+extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
+    TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
+    apic::eoi();
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {

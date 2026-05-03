@@ -6,6 +6,7 @@
 extern crate alloc;
 
 mod allocator;
+mod apic;
 mod gdt;
 mod interrupts;
 mod memory;
@@ -89,9 +90,21 @@ extern "C" fn _start() -> ! {
 
     allocator::init(&mut mapper);
 
+    // Initialize APIC and timer
+    apic::disable_pic();
+    apic::init(hhdm_offset, &mut mapper);
+    apic::configure_timer(interrupts::TIMER_VECTOR, 0x100000);
+    x86_64::instructions::interrupts::enable();
+    println!("[boot] APIC timer running, interrupts enabled");
+
+    // Spin briefly to verify timer is ticking
+    for _ in 0..2_000_000 {
+        core::hint::spin_loop();
+    }
+    println!("[boot] Timer ticks: {}", interrupts::ticks());
+
     println!();
-    println!("[boot] Phase 1 complete — kernel foundation operational");
-    println!("[boot] Awaiting Phase 2: Scheduler & Interrupts");
+    println!("[boot] Phase 2 in progress — scheduler next");
     println!();
 
     // Halt the CPU in a low-power loop
