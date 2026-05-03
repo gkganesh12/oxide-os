@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 mod gdt;
+mod interrupts;
 mod serial;
 
 use core::panic::PanicInfo;
@@ -65,6 +67,9 @@ extern "C" fn _start() -> ! {
 
     gdt::init();
     println!("[boot] GDT initialized.");
+
+    interrupts::init();
+    println!("[boot] IDT initialized.");
 
     // Print memory map information.
     if let Some(response) = MEMMAP_REQUEST.response() {
