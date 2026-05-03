@@ -20,7 +20,10 @@ impl ResourceRef {
     pub fn is_subset_of(&self, parent: &ResourceRef) -> bool {
         match (self, parent) {
             (ResourceRef::Memory { base: cb, length: cl }, ResourceRef::Memory { base: pb, length: pl }) => {
-                *cb >= *pb && cb + cl <= pb + pl
+                // Use saturating_add to prevent overflow on large regions
+                let child_end = cb.saturating_add(*cl);
+                let parent_end = pb.saturating_add(*pl);
+                *cb >= *pb && child_end <= parent_end
             }
             (a, b) if a == b => true,
             (

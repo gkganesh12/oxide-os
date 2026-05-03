@@ -48,8 +48,8 @@ impl CapabilityTable {
             revoked: false,
         };
         let idx = id as usize;
-        while self.capabilities.len() <= idx {
-            self.capabilities.push(None);
+        if self.capabilities.len() <= idx {
+            self.capabilities.resize_with(idx + 1, || None);
         }
         self.capabilities[idx] = Some(cap);
         let stored = self.capabilities[idx].as_ref().unwrap();
@@ -117,8 +117,8 @@ impl CapabilityTable {
             revoked: false,
         };
         let idx = id as usize;
-        while self.capabilities.len() <= idx {
-            self.capabilities.push(None);
+        if self.capabilities.len() <= idx {
+            self.capabilities.resize_with(idx + 1, || None);
         }
         self.capabilities[idx] = Some(cap);
         println!("[cap] Delegated #{} -> #{} (task {} -> {})", source_id, id, from, to);

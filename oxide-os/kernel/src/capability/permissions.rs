@@ -45,38 +45,24 @@ impl PermissionBits {
 
 impl fmt::Display for PermissionBits {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Display as readable permission string like [R|W|X|D]
-        let mut parts = alloc::vec::Vec::new();
-        if self.contains(Self::READ) {
-            parts.push("R");
-        }
-        if self.contains(Self::WRITE) {
-            parts.push("W");
-        }
-        if self.contains(Self::EXECUTE) {
-            parts.push("X");
-        }
-        if self.contains(Self::DELEGATE) {
-            parts.push("D");
-        }
-        if self.contains(Self::SPAWN) {
-            parts.push("SPAWN");
-        }
-        if self.contains(Self::KILL) {
-            parts.push("KILL");
-        }
-        if self.contains(Self::SUBSCRIBE) {
-            parts.push("SUB");
-        }
-        if self.contains(Self::PUBLISH) {
-            parts.push("PUB");
-        }
-        if self.contains(Self::CONNECT) {
-            parts.push("CONN");
-        }
-        if parts.is_empty() {
+        // Zero-allocation display — writes directly to formatter
+        if self.0 == 0 {
             return write!(f, "[NONE]");
         }
-        write!(f, "[{}]", parts.join("|"))
+        write!(f, "[")?;
+        let mut first = true;
+        let flags: &[(&str, Self)] = &[
+            ("R", Self::READ), ("W", Self::WRITE), ("X", Self::EXECUTE),
+            ("D", Self::DELEGATE), ("SPAWN", Self::SPAWN), ("KILL", Self::KILL),
+            ("SUB", Self::SUBSCRIBE), ("PUB", Self::PUBLISH), ("CONN", Self::CONNECT),
+        ];
+        for &(name, flag) in flags {
+            if self.contains(flag) {
+                if !first { write!(f, "|")?; }
+                write!(f, "{}", name)?;
+                first = false;
+            }
+        }
+        write!(f, "]")
     }
 }

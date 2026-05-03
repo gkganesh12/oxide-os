@@ -121,21 +121,29 @@ impl Task {
             capabilities: Vec::new(),
         }
     }
-}
 
-impl Task {
+    /// Check if this task holds a specific capability.
     pub fn has_capability(&self, cap_id: CapId) -> bool {
         self.capabilities.contains(&cap_id)
     }
 
+    /// Grant a capability to this task.
     pub fn grant_capability(&mut self, cap_id: CapId) {
         if !self.capabilities.contains(&cap_id) {
             self.capabilities.push(cap_id);
         }
     }
 
+    /// Remove a capability from this task's set.
     pub fn revoke_capability(&mut self, cap_id: CapId) {
         self.capabilities.retain(|&id| id != cap_id);
+    }
+
+    /// Remove all revoked capabilities from the task's set (garbage collection).
+    pub fn gc_capabilities(&mut self) {
+        use crate::capability::CAP_TABLE;
+        let table = CAP_TABLE.lock();
+        self.capabilities.retain(|&id| table.get(id).is_ok());
     }
 }
 
