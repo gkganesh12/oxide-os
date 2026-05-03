@@ -54,6 +54,9 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     if tick % 50 == 0 {
         crate::ipc::request_reply::check_timeouts();
     }
+
+    // Fire expired deadline timers
+    crate::timer::deadline::tick(tick);
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {

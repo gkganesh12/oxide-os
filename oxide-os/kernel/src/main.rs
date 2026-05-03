@@ -16,8 +16,10 @@ mod memory;
 mod net;
 mod qemu;
 mod serial;
+mod crypto;
 mod storage;
 mod task;
+mod timer;
 
 use core::panic::PanicInfo;
 use limine::BaseRevision;
@@ -93,6 +95,9 @@ extern "C" fn _start() -> ! {
     net::init(hhdm_offset);
 
     storage::init(hhdm_offset);
+
+    crypto::init();
+    timer::init();
 
     // Initialize APIC and timer
     apic::disable_pic();
