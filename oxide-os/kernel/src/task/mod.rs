@@ -10,9 +10,11 @@ pub mod context;
 pub mod scheduler;
 
 use alloc::string::String;
+use alloc::vec::Vec;
 use context::CpuContext;
 use x86_64::structures::paging::{Page, PageTableFlags, OffsetPageTable, Size4KiB};
 use x86_64::VirtAddr;
+use crate::capability::CapId;
 use crate::memory::paging;
 use crate::memory::PAGE_SIZE;
 
@@ -48,6 +50,7 @@ pub struct Task {
     pub priority: Priority,
     pub context: CpuContext,
     pub stack_top: u64,
+    pub capabilities: Vec<CapId>,
 }
 
 static NEXT_ID: spin::Mutex<u64> = spin::Mutex::new(1);
@@ -115,7 +118,24 @@ impl Task {
             priority,
             context,
             stack_top,
+            capabilities: Vec::new(),
         }
+    }
+}
+
+impl Task {
+    pub fn has_capability(&self, cap_id: CapId) -> bool {
+        self.capabilities.contains(&cap_id)
+    }
+
+    pub fn grant_capability(&mut self, cap_id: CapId) {
+        if !self.capabilities.contains(&cap_id) {
+            self.capabilities.push(cap_id);
+        }
+    }
+
+    pub fn revoke_capability(&mut self, cap_id: CapId) {
+        self.capabilities.retain(|&id| id != cap_id);
     }
 }
 

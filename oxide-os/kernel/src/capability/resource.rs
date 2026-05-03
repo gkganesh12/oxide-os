@@ -19,6 +19,9 @@ impl ResourceRef {
     /// Check if `self` is a subset of `parent` (for delegation validation).
     pub fn is_subset_of(&self, parent: &ResourceRef) -> bool {
         match (self, parent) {
+            (ResourceRef::Memory { base: cb, length: cl }, ResourceRef::Memory { base: pb, length: pl }) => {
+                *cb >= *pb && cb + cl <= pb + pl
+            }
             (a, b) if a == b => true,
             (
                 ResourceRef::Network {

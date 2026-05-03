@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use super::{CapError, PermissionBits, ResourceRef};
+use crate::println;
 use crate::task::TaskId;
 
 pub type CapId = u64;
@@ -51,6 +52,8 @@ impl CapabilityTable {
             self.capabilities.push(None);
         }
         self.capabilities[idx] = Some(cap);
+        let stored = self.capabilities[idx].as_ref().unwrap();
+        println!("[cap] Created root #{} for task {} -> {:?} {}", id, owner, stored.resource, stored.permissions);
         id
     }
 
@@ -118,6 +121,7 @@ impl CapabilityTable {
             self.capabilities.push(None);
         }
         self.capabilities[idx] = Some(cap);
+        println!("[cap] Delegated #{} -> #{} (task {} -> {})", source_id, id, from, to);
         Ok(id)
     }
 
@@ -137,7 +141,9 @@ impl CapabilityTable {
                 return Err(CapError::NotOwner);
             }
         }
-        Ok(self.revoke_recursive(cap_id))
+        let count = self.revoke_recursive(cap_id);
+        println!("[cap] Revoked #{} ({} capabilities cascaded)", cap_id, count);
+        Ok(count)
     }
 
     fn revoke_recursive(&mut self, cap_id: CapId) -> usize {
