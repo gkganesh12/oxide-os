@@ -59,10 +59,10 @@
         @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
 
         /* === CHAPTER 2: THE QUESTION === */
-        .chapter{padding:10rem 3rem;max-width:1100px;margin:0 auto}
+        .chapter{padding:5rem 3rem;max-width:1100px;margin:0 auto}
         .ch-label{font-family:'IBM Plex Mono',monospace;font-size:.65rem;letter-spacing:4px;text-transform:uppercase;color:var(--r);margin-bottom:1.5rem}
         .ch-h{font-size:clamp(2rem,5vw,3.5rem);font-weight:700;line-height:1.05;letter-spacing:-1.5px;margin-bottom:1.5rem}
-        .ch-p{font-size:1.05rem;color:var(--g);max-width:580px;line-height:1.8;margin-bottom:3rem}
+        .ch-p{font-size:1.05rem;color:var(--g);max-width:580px;line-height:1.8;margin-bottom:2rem}
 
         /* Pain points - staggered lines */
         .pain{border-left:2px solid var(--r);padding-left:2rem;margin-bottom:2rem}
@@ -70,7 +70,7 @@
         .pain p{color:var(--g);font-size:.9rem}
 
         /* === CHAPTER 3: THE ANSWER === */
-        .answer-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:3rem 0}
+        .answer-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:2rem 0}
         .answer-cell{padding:2.5rem;border:1px solid #111;transition:background .3s}
         .answer-cell:hover{background:#0a0a0a}
         .answer-cell .num{font-family:'IBM Plex Mono',monospace;font-size:2.5rem;font-weight:700;color:#1a1a1a;margin-bottom:.8rem}
@@ -96,14 +96,14 @@
         .arch-layer .layer-content strong{color:var(--w);font-weight:600}
 
         /* === CHAPTER 6: THE NUMBERS === */
-        .numbers-row{display:flex;justify-content:space-between;border-top:1px solid #111;padding:3rem 0}
+        .numbers-row{display:flex;justify-content:space-between;border-top:1px solid #111;padding:2rem 0}
         .num-item{text-align:center}
         .num-item .big{font-size:3.5rem;font-weight:700;letter-spacing:-2px}
         .num-item .big span{color:var(--r)}
         .num-item .label{font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--gd);letter-spacing:1.5px;text-transform:uppercase;margin-top:.5rem}
 
         /* === CHAPTER 7: THE ASK === */
-        .finale{text-align:center;padding:12rem 3rem 8rem;position:relative}
+        .finale{text-align:center;padding:6rem 3rem 5rem;position:relative}
         .finale::before{content:'';position:absolute;top:30%;left:50%;transform:translateX(-50%);width:500px;height:500px;background:radial-gradient(circle,var(--rg) 0%,transparent 70%);pointer-events:none}
         .finale h2{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:700;line-height:1;letter-spacing:-2px;margin-bottom:1.5rem}
         .finale h2 em{font-style:normal;color:var(--r)}
@@ -358,8 +358,24 @@
     </div>
 </section>
 
+<!-- ═══ FOUNDER ═══ -->
+<section class="chapter" style="padding:4rem 3rem;border-top:1px solid #111">
+    <div style="display:flex;align-items:center;gap:3rem;flex-wrap:wrap">
+        <img src="founder.png" alt="Ganesh Khetawat" style="width:180px;height:180px;object-fit:cover;border:1px solid #1a1a1a;filter:contrast(1.1)">
+        <div>
+            <div class="ch-label" style="margin-bottom:.8rem">The builder</div>
+            <h3 style="font-size:1.5rem;font-weight:700;margin-bottom:.5rem">Ganesh Khetawat</h3>
+            <p style="color:var(--g);font-size:.95rem;max-width:400px;line-height:1.7;margin-bottom:1rem">Built Oxide OS from scratch — 5,384 lines of Rust, from bare metal boot to an AI agent swarm with real hardware drivers, capability security, and supervision trees.</p>
+            <div style="display:flex;gap:1rem">
+                <a href="https://github.com/gkganesh12" class="btn btn-o" style="padding:.5rem 1rem;font-size:.7rem">GitHub</a>
+                <a href="mailto:gkganesh12@gmail.com" class="btn btn-o" style="padding:.5rem 1rem;font-size:.7rem">Email</a>
+            </div>
+        </div>
+    </div>
+</section>
+
 <footer>
-    Built by <a href="https://github.com/gkganesh12">Ganesh Khetawat</a> — Where AI agents aren't guests. They're the reason the kernel exists.
+    Built from scratch. In Rust. For AI agents.
 </footer>
 
 <script>
