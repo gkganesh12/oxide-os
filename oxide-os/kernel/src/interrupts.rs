@@ -40,6 +40,7 @@ pub fn ticks() -> u64 {
 extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
     apic::eoi();
+    // Signal that a reschedule is needed — actual switch happens outside ISR
     crate::task::scheduler::timer_tick();
 }
 

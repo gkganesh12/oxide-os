@@ -1,11 +1,19 @@
 //! Task (thread) abstraction for the Oxide OS scheduler.
+//!
+//! Each task has:
+//! - A unique ID
+//! - Its own kernel stack (contiguous, with a guard page)
+//! - A saved CPU context for context switching
+//! - Priority level and scheduling state
 
 pub mod context;
 pub mod scheduler;
 
 use alloc::string::String;
 use context::CpuContext;
-use crate::memory::frame_allocator::FRAME_ALLOCATOR;
+use x86_64::structures::paging::{Page, PageTableFlags, OffsetPageTable, Size4KiB};
+use x86_64::VirtAddr;
+use crate::memory::paging;
 use crate::memory::PAGE_SIZE;
 
 pub type TaskId = u64;
@@ -25,9 +33,13 @@ pub enum Priority {
     Background = 2,
 }
 
-/// Kernel stack: 16 KiB (4 pages)
-const KERNEL_STACK_PAGES: u64 = 4;
-const KERNEL_STACK_SIZE: u64 = KERNEL_STACK_PAGES * PAGE_SIZE;
+/// Kernel stack size: 16 KiB (4 pages) + 1 guard page
+const STACK_PAGES: u64 = 4;
+const STACK_SIZE: u64 = STACK_PAGES * PAGE_SIZE;
+/// Virtual address region for task stacks. Each task gets (1 guard + 4 stack) pages.
+/// Task N's stack lives at STACK_REGION_BASE + N * STACK_SLOT_SIZE
+const STACK_REGION_BASE: u64 = 0xFFFF_B000_0000_0000;
+const STACK_SLOT_SIZE: u64 = (STACK_PAGES + 1) * PAGE_SIZE; // guard + stack
 
 pub struct Task {
     pub id: TaskId,
@@ -35,16 +47,26 @@ pub struct Task {
     pub state: TaskState,
     pub priority: Priority,
     pub context: CpuContext,
-    pub kernel_stack_bottom: u64,
-    pub kernel_stack_top: u64,
+    pub stack_top: u64,
 }
 
 static NEXT_ID: spin::Mutex<u64> = spin::Mutex::new(1);
 
 impl Task {
-    /// Create a new task. `entry` is where execution begins.
-    /// `hhdm_offset` is needed to convert physical stack frames to virtual addresses.
-    pub fn new(name: String, priority: Priority, entry: fn() -> !, hhdm_offset: u64) -> Self {
+    /// Create a new task with a properly mapped, contiguous kernel stack.
+    ///
+    /// The stack layout for task N:
+    /// ```text
+    /// [guard page - unmapped] [stack page 0] [stack page 1] [stack page 2] [stack page 3]
+    ///                         ^                                                            ^
+    ///                    stack_bottom                                                  stack_top (RSP starts here)
+    /// ```
+    pub fn new(
+        name: String,
+        priority: Priority,
+        entry: fn() -> !,
+        mapper: &mut OffsetPageTable,
+    ) -> Self {
         let id = {
             let mut next = NEXT_ID.lock();
             let current = *next;
@@ -52,31 +74,38 @@ impl Task {
             current
         };
 
-        // Allocate physical frames for kernel stack
-        let stack_phys = {
-            let mut alloc = FRAME_ALLOCATOR.lock();
-            let alloc = alloc.as_mut().expect("frame allocator not init");
-            let first = alloc.allocate_frame().expect("OOM: task stack");
-            // Allocate remaining pages (they'll be contiguous-ish from bitmap)
-            for _ in 1..KERNEL_STACK_PAGES {
-                alloc.allocate_frame().expect("OOM: task stack");
-            }
-            first.start_address().as_u64()
-        };
+        // Calculate this task's stack virtual address
+        let slot_base = STACK_REGION_BASE + (id as u64) * STACK_SLOT_SIZE;
+        // First page is the guard page (NOT mapped — access causes page fault)
+        let stack_bottom = slot_base + PAGE_SIZE; // Skip guard page
+        let stack_top = stack_bottom + STACK_SIZE;
 
-        let stack_bottom = stack_phys + hhdm_offset;
-        let stack_top = stack_bottom + KERNEL_STACK_SIZE;
+        // Map stack pages (contiguous in virtual address space)
+        let flags = PageTableFlags::PRESENT
+            | PageTableFlags::WRITABLE
+            | PageTableFlags::NO_EXECUTE;
 
-        // Set up initial context: when we switch to this task, it jumps to `entry`
+        for i in 0..STACK_PAGES {
+            let page_addr = VirtAddr::new(stack_bottom + i * PAGE_SIZE);
+            let page = Page::<Size4KiB>::containing_address(page_addr);
+            paging::alloc_and_map(mapper, page, flags);
+        }
+        // Guard page is intentionally NOT mapped — any access triggers page fault
+
+        // Set up initial context.
+        // The task's initial RIP points to `task_entry_trampoline`.
+        // The actual entry function pointer is stored in R12 (callee-saved,
+        // survives context_switch). The trampoline enables interrupts and
+        // then calls the real entry function.
         let context = CpuContext {
             rsp: stack_top,
             rbp: 0,
             rbx: 0,
-            r12: 0,
+            r12: entry as u64, // Real entry fn stored here
             r13: 0,
             r14: 0,
             r15: 0,
-            rip: entry as u64,
+            rip: task_entry_trampoline as u64,
         };
 
         Task {
@@ -85,8 +114,21 @@ impl Task {
             state: TaskState::Ready,
             priority,
             context,
-            kernel_stack_bottom: stack_bottom,
-            kernel_stack_top: stack_top,
+            stack_top,
         }
+    }
+}
+
+/// Trampoline for fresh tasks. Called by context_switch when a task runs for
+/// the first time. Enables interrupts (which were disabled by yield_now)
+/// then calls the real entry function stored in R12.
+#[unsafe(naked)]
+extern "C" fn task_entry_trampoline() -> ! {
+    unsafe {
+        core::arch::naked_asm!(
+            "sti",          // Enable interrupts
+            "call r12",     // Call the real entry function (stored by Task::new)
+            "ud2",          // Should never return — entry is fn() -> !
+        );
     }
 }

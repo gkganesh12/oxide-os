@@ -2,7 +2,6 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
-#![feature(naked_functions)]
 
 extern crate alloc;
 
@@ -19,7 +18,6 @@ use core::panic::PanicInfo;
 use limine::BaseRevision;
 use limine::request::{HhdmRequest, MemmapRequest, StackSizeRequest};
 
-/// Request markers and base revision for Limine bootloader protocol.
 #[used]
 #[unsafe(link_section = ".limine_requests_start")]
 static LIMINE_REQUESTS_START: limine::RequestsStartMarker = limine::RequestsStartMarker::new();
@@ -28,29 +26,24 @@ static LIMINE_REQUESTS_START: limine::RequestsStartMarker = limine::RequestsStar
 #[unsafe(link_section = ".limine_requests_end")]
 static LIMINE_REQUESTS_END: limine::RequestsEndMarker = limine::RequestsEndMarker::new();
 
-/// Base revision: request revision 3 (supported by Limine v8).
 #[used]
 #[unsafe(link_section = ".limine_requests")]
 static BASE_REVISION: BaseRevision = BaseRevision::with_revision(3);
 
-/// Request a 64 KiB stack.
 #[used]
 #[unsafe(link_section = ".limine_requests")]
 static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new(64 * 1024);
 
-/// Request the Higher-Half Direct Map offset.
 #[used]
 #[unsafe(link_section = ".limine_requests")]
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
-/// Request the physical memory map.
 #[used]
 #[unsafe(link_section = ".limine_requests")]
 static MEMMAP_REQUEST: MemmapRequest = MemmapRequest::new();
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Use panic_println to bypass serial lock (avoids deadlock if we panicked while printing)
     panic_println!("KERNEL PANIC: {}", info);
     loop {
         core::hint::spin_loop();
@@ -95,39 +88,48 @@ extern "C" fn _start() -> ! {
     // Initialize APIC and timer
     apic::disable_pic();
     apic::init(hhdm_offset, &mut mapper);
-    apic::configure_timer(interrupts::TIMER_VECTOR, 0x20000); // ~10-50 Hz
+    apic::configure_timer(interrupts::TIMER_VECTOR, 0x20000);
     x86_64::instructions::interrupts::enable();
     println!("[boot] APIC timer running, interrupts enabled");
 
-    // Spawn test tasks
+    // Spawn tasks
     {
         use task::{Task, Priority};
         use task::scheduler::SCHEDULER;
         use alloc::string::String;
 
         let mut sched = SCHEDULER.lock();
-        sched.spawn(Task::new(String::from("task-a"), Priority::Normal, task_a, hhdm_offset));
-        sched.spawn(Task::new(String::from("task-b"), Priority::Normal, task_b, hhdm_offset));
+        sched.spawn(Task::new(String::from("task-a"), Priority::Normal, task_a, &mut mapper));
+        sched.spawn(Task::new(String::from("task-b"), Priority::Normal, task_b, &mut mapper));
+        sched.spawn(Task::new(String::from("task-c"), Priority::Realtime, task_c, &mut mapper));
         sched.print_stats();
     }
 
-    println!("[boot] Scheduler active — entering idle loop");
+    println!("[boot] Scheduler active");
     println!();
 
-    // Idle loop — scheduler preempts via timer
+    // Idle loop — yields to tasks when reschedule is pending
     loop {
-        x86_64::instructions::hlt();
+        x86_64::instructions::hlt(); // Sleep until next interrupt
+        if task::scheduler::should_reschedule() {
+            task::scheduler::yield_now();
+        }
     }
 }
+
+// --- Test Tasks ---
 
 fn task_a() -> ! {
     let mut count = 0u64;
     loop {
         count += 1;
-        if count % 500_000 == 0 {
-            println!("[task-a] tick={} count={}", interrupts::ticks(), count);
+        if count % 1_000_000 == 0 {
+            println!("[task-a] tick={} iterations={}", interrupts::ticks(), count);
         }
-        core::hint::spin_loop();
+        // Cooperative reschedule check — ensures preemption even without true interrupt-return patching
+        if task::scheduler::should_reschedule() {
+            task::scheduler::yield_now();
+        }
     }
 }
 
@@ -135,9 +137,25 @@ fn task_b() -> ! {
     let mut count = 0u64;
     loop {
         count += 1;
-        if count % 500_000 == 0 {
-            println!("[task-b] tick={} count={}", interrupts::ticks(), count);
+        if count % 1_000_000 == 0 {
+            println!("[task-b] tick={} iterations={}", interrupts::ticks(), count);
         }
-        core::hint::spin_loop();
+        if task::scheduler::should_reschedule() {
+            task::scheduler::yield_now();
+        }
+    }
+}
+
+/// Realtime priority task — should run before Normal tasks when both are ready.
+fn task_c() -> ! {
+    let mut count = 0u64;
+    loop {
+        count += 1;
+        if count % 2_000_000 == 0 {
+            println!("[task-c RT] tick={} iterations={}", interrupts::ticks(), count);
+        }
+        if task::scheduler::should_reschedule() {
+            task::scheduler::yield_now();
+        }
     }
 }

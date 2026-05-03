@@ -13,7 +13,9 @@ const APIC_TIMER_INIT_COUNT: u32 = 0x380;
 const APIC_TIMER_DIVIDE: u32 = 0x3E0;
 const APIC_EOI: u32 = 0x0B0;
 
-static mut APIC_VIRT_BASE: u64 = 0;
+use core::sync::atomic::{AtomicU64, Ordering};
+
+static APIC_VIRT_BASE: AtomicU64 = AtomicU64::new(0);
 
 /// Disable the legacy 8259 PIC by masking all IRQs.
 pub fn disable_pic() {
@@ -48,7 +50,7 @@ pub fn init(hhdm_offset: u64, mapper: &mut OffsetPageTable) {
         }
     }
 
-    unsafe { APIC_VIRT_BASE = apic_virt; }
+    APIC_VIRT_BASE.store(apic_virt, Ordering::Release);
 
     // Enable APIC via spurious interrupt vector register (vector 0xFF, enable bit 8)
     unsafe {
@@ -90,6 +92,7 @@ fn read_apic_base_phys() -> u64 {
 }
 
 unsafe fn write_reg(offset: u32, value: u32) {
-    let ptr = unsafe { (APIC_VIRT_BASE + offset as u64) as *mut u32 };
+    let base = APIC_VIRT_BASE.load(Ordering::Acquire);
+    let ptr = (base + offset as u64) as *mut u32;
     unsafe { ptr.write_volatile(value); }
 }
