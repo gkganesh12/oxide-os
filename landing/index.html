@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oxide OS — The Operating System for AI Agents</title>
+    <meta name="description" content="Kernel-level isolation for autonomous AI agents. Built from scratch in Rust. Capability-based security, built-in IPC, supervision trees.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0f;
+            --bg-elevated: #111118;
+            --bg-card: #16161f;
+            --border: #1e1e2e;
+            --text: #e0e0e8;
+            --text-muted: #8888a0;
+            --accent: #f74c00;
+            --accent-glow: rgba(247, 76, 0, 0.15);
+            --rust: #dea584;
+            --green: #4ec9b0;
+            --blue: #569cd6;
+            --yellow: #dcdcaa;
+            --purple: #c586c0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* === NAV === */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+            padding: 1rem 2rem;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-logo span { color: var(--accent); }
+
+        .nav-links { display: flex; gap: 2rem; align-items: center; }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: var(--text); }
+
+        .nav-cta {
+            background: var(--accent) !important;
+            color: #fff !important;
+            padding: 0.5rem 1.2rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        /* === HERO === */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8rem 2rem 4rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            left: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            width: fit-content;
+        }
+
+        .hero-badge .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        h1 {
+            font-size: clamp(3rem, 6vw, 5rem);
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 .highlight {
+            background: linear-gradient(135deg, var(--accent), #ff8c42);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-sub {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            max-width: 640px;
+            margin-bottom: 2.5rem;
+            font-weight: 400;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.8rem 1.8rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover { border-color: var(--text-muted); }
+
+        .hero-stats {
+            display: flex;
+            gap: 3rem;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat { text-align: left; }
+        .stat-value { font-size: 2rem; font-weight: 800; color: var(--accent); }
+        .stat-label { font-size: 0.85rem; color: var(--text-muted); }
+
+        /* === SECTIONS === */
+        section {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 6rem 2rem;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 1rem;
+        }
+
+        .section-sub {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin-bottom: 3rem;
+        }
+
+        /* === PROBLEM === */
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .problem-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+        }
+
+        .problem-card .icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .problem-card h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .problem-card p {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* === TERMINAL === */
+        .terminal {
+            background: #0d0d12;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 3rem 0;
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.8rem 1.2rem;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27c93f; }
+
+        .terminal-title {
+            margin-left: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .terminal-body {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            line-height: 1.8;
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .terminal-body .comment { color: #6a737d; }
+        .terminal-body .keyword { color: var(--purple); }
+        .terminal-body .string { color: #ce9178; }
+        .terminal-body .success { color: var(--green); }
+        .terminal-body .info { color: var(--blue); }
+        .terminal-body .warn { color: var(--yellow); }
+        .terminal-body .accent { color: var(--accent); }
+        .terminal-body .dim { color: #555; }
+        .terminal-body .bright { color: #fff; font-weight: 600; }
+
+        /* === DESIGN PRINCIPLES === */
+        .principles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+        }
+
+        .principle {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .principle::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+        }
+
+        .principle .number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .principle h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+        }
+
+        .principle p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .principle code {
+            display: block;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--rust);
+            white-space: pre;
+        }
+
+        /* === COMPARISON === */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+        }
+
+        .comparison-table th, .comparison-table td {
+            padding: 1rem 1.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .comparison-table td:first-child { font-weight: 600; }
+        .comparison-table .linux { color: var(--text-muted); }
+        .comparison-table .oxide { color: var(--green); font-weight: 500; }
+
+        /* === ARCH === */
+        .arch-visual {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 3rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+            color: var(--text-muted);
+        }
+
+        /* === CTA === */
+        .cta-section {
+            text-align: center;
+            padding: 8rem 2rem;
+            position: relative;
+        }
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 400px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .cta-section h2 { margin-bottom: 1rem; }
+
+        .cta-section p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+
+        /* === FOOTER === */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+
+        /* === RESPONSIVE === */
+        @media (max-width: 768px) {
+            .hero-stats { flex-direction: column; gap: 1.5rem; }
+            .nav-links { display: none; }
+            h1 { font-size: 2.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-logo"><span>Oxide</span>OS</div>
+    <div class="nav-links">
+        <a href="#problem">Problem</a>
+        <a href="#solution">Solution</a>
+        <a href="#principles">Design</a>
+        <a href="#demo">Demo</a>
+        <a href="https://github.com/gkganesh12/oxide-os" class="nav-cta">GitHub</a>
+    </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+    <div class="hero-badge">
+        <div class="dot"></div>
+        Built from scratch in Rust. Boots on bare metal.
+    </div>
+
+    <h1>
+        The operating system<br>
+        built for <span class="highlight">AI agents</span>
+    </h1>
+
+    <p class="hero-sub">
+        Oxide OS is a microkernel where AI agents are first-class citizens.
+        Capability-based security, built-in IPC, supervision trees, and real hardware drivers.
+        Not a container. Not a sandbox. A real OS.
+    </p>
+
+    <div class="hero-actions">
+        <a href="https://github.com/gkganesh12/oxide-os" class="btn btn-primary">View Source</a>
+        <a href="#demo" class="btn btn-secondary">See it boot</a>
+    </div>
+
+    <div class="hero-stats">
+        <div class="stat">
+            <div class="stat-value">5,384</div>
+            <div class="stat-label">lines of Rust kernel code</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">&lt;1s</div>
+            <div class="stat-label">boot time</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">15</div>
+            <div class="stat-label">kernel subsystems</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">0</div>
+            <div class="stat-label">lines of C</div>
+        </div>
+    </div>
+</div>
+
+<!-- PROBLEM -->
+<section id="problem">
+    <h2>The problem with running agents on Linux</h2>
+    <p class="section-sub">AI agents need autonomy. But today's infrastructure gives them either too much access or not enough.</p>
+
+    <div class="problem-grid">
+        <div class="problem-card">
+            <div class="icon">&#x1f513;</div>
+            <h3>No fine-grained isolation</h3>
+            <p>A compromised agent in Docker can still probe the network, read env vars, and access shared volumes. Containers weren't designed for autonomous programs that take actions.</p>
+        </div>
+        <div class="problem-card">
+            <div class="icon">&#x1f4ac;</div>
+            <h3>No native communication</h3>
+            <p>50 agents need Redis, RabbitMQ, or HTTP APIs just to talk to each other. That's 3 external services for basic message passing.</p>
+        </div>
+        <div class="problem-card">
+            <div class="icon">&#x1f4a5;</div>
+            <h3>No crash resilience</h3>
+            <p>When an agent crashes, nothing restarts it with the right context. Kubernetes can restart pods, but it doesn't understand agent supervision trees.</p>
+        </div>
+        <div class="problem-card">
+            <div class="icon">&#x26a0;&#xfe0f;</div>
+            <h3>Security teams say no</h3>
+            <p>Enterprises want to deploy agents but can't. "How do we let AI act autonomously without giving it the keys to the kingdom?" Nobody has a good answer.</p>
+        </div>
+    </div>
+</section>
+
+<!-- SOLUTION -->
+<section id="solution">
+    <h2>Oxide OS: agents are the kernel's job</h2>
+    <p class="section-sub">What if isolation, communication, and supervision were built into the operating system itself?</p>
+
+    <table class="comparison-table">
+        <thead>
+            <tr>
+                <th>Capability</th>
+                <th>Linux + Docker</th>
+                <th>Oxide OS</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Agent isolation</td>
+                <td class="linux">Container namespaces (heavyweight, bypassable)</td>
+                <td class="oxide">Kernel capability tokens (unforgeable, zero overhead)</td>
+            </tr>
+            <tr>
+                <td>Network access control</td>
+                <td class="linux">iptables rules (complex, misconfigurable)</td>
+                <td class="oxide">Per-agent, per-endpoint capability: net:api.openai.com:443</td>
+            </tr>
+            <tr>
+                <td>Agent communication</td>
+                <td class="linux">External service (Redis, gRPC, HTTP)</td>
+                <td class="oxide">Built-in IPC: messages, shared memory, pub/sub</td>
+            </tr>
+            <tr>
+                <td>Crash recovery</td>
+                <td class="linux">Kubernetes pod restart (no context)</td>
+                <td class="oxide">Supervision trees: RestartOne, RestartAll, Escalate</td>
+            </tr>
+            <tr>
+                <td>Permission delegation</td>
+                <td class="linux">Not possible (root or nothing)</td>
+                <td class="oxide">Capability delegation with subset enforcement</td>
+            </tr>
+            <tr>
+                <td>Permission revocation</td>
+                <td class="linux">Restart the container</td>
+                <td class="oxide">Instant cascading revocation (parent revokes all children)</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- DESIGN PRINCIPLES -->
+<section id="principles">
+    <h2>Design principles</h2>
+    <p class="section-sub">Every decision in Oxide OS follows these principles.</p>
+
+    <div class="principles">
+        <div class="principle">
+            <div class="number">01</div>
+            <h3>Zero ambient authority</h3>
+            <p>An agent with no capabilities can do nothing. Every resource access &mdash; network, storage, IPC, spawning children &mdash; requires an explicit, unforgeable capability token.</p>
+            <code>cap #2 -> Agent(4) [WRITE]
+// Agent 2 can message Agent 4
+// Cannot spawn, cannot network,
+// cannot read storage</code>
+        </div>
+
+        <div class="principle">
+            <div class="number">02</div>
+            <h3>Crash is expected, not exceptional</h3>
+            <p>AI agents fail. Models hallucinate. APIs timeout. The kernel manages supervision trees with automatic restart policies &mdash; like Erlang, but for AI agents.</p>
+            <code>supervisor (RestartOne)
+&#x251c;&#x2500; researcher-1  [Running]
+&#x251c;&#x2500; researcher-2  [Crashed -> Restarting]
+&#x2514;&#x2500; aggregator    [Running]</code>
+        </div>
+
+        <div class="principle">
+            <div class="number">03</div>
+            <h3>Real hardware, not emulation</h3>
+            <p>Oxide OS discovers PCI devices, sets up DMA ring buffers, and talks to virtio hardware directly. This is a real kernel, not a hosted runtime.</p>
+            <code>[pci] 00:03.0 vendor=1AF4 device=1000
+[net] virtio-net: ONLINE (real driver)
+[net] Queue 0: 256 entries (RX)
+[net] Queue 1: 256 entries (TX)</code>
+        </div>
+
+        <div class="principle">
+            <div class="number">04</div>
+            <h3>Rust safety at every layer</h3>
+            <p>Memory safety without runtime cost. The entire kernel is Rust with <code>unsafe</code> only at hardware boundaries. No garbage collector, no runtime, no C.</p>
+            <code>5,384 lines of Rust
+0 lines of C
+8 unsafe blocks (hardware I/O only)</code>
+        </div>
+
+        <div class="principle">
+            <div class="number">05</div>
+            <h3>Delegation, not escalation</h3>
+            <p>An agent can give its children a subset of its own capabilities. Never more. Capabilities flow down the tree and can be revoked instantly, cascading to all descendants.</p>
+            <code>supervisor [SPAWN|KILL|DELEGATE]
+&#x251c;&#x2500; agent-1 [WRITE to agent-3]
+&#x2514;&#x2500; agent-2 [READ from storage]
+    // agent-2 CANNOT delegate
+    // what it doesn't have</code>
+        </div>
+
+        <div class="principle">
+            <div class="number">06</div>
+            <h3>Built for the agent era</h3>
+            <p>Not a general-purpose OS with agents bolted on. Every kernel primitive &mdash; scheduling, memory, IPC, security &mdash; is designed for autonomous AI agent workloads.</p>
+            <code>struct AgentConfig {
+  system_prompt: String,
+  model: ModelBinding,
+  tools: Vec&lt;String&gt;,
+  capabilities: Vec&lt;CapId&gt;,
+  restart_policy: RestartPolicy,
+}</code>
+        </div>
+    </div>
+</section>
+
+<!-- DEMO -->
+<section id="demo">
+    <h2>Watch it boot</h2>
+    <p class="section-sub">Real output from Oxide OS running in QEMU. PCI discovery, virtio drivers, agent swarm &mdash; all live.</p>
+
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green"></div>
+            <span class="terminal-title">qemu-system-x86_64 -cdrom oxide-os.iso -serial stdio</span>
+        </div>
+        <div class="terminal-body">
+<span class="bright">  &#x2554;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2557;
+  &#x2551;        Oxide OS v1.2.0               &#x2551;
+  &#x2551;   Agent-Native Microkernel (Rust)    &#x2551;
+  &#x255a;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x255d;</span>
+
+<span class="success">[boot]</span> Limine protocol OK
+<span class="success">[boot]</span> GDT loaded | IDT loaded
+<span class="info">[memory]</span> Frame allocator: 30097/32582 frames free (117 MiB)
+<span class="info">[pci]</span> Found 7 devices
+<span class="dim">[pci]   00:03.0 vendor=1AF4 device=1000 class=02:00</span>    <span class="comment">&lt;- virtio-net</span>
+<span class="dim">[pci]   00:04.0 vendor=1AF4 device=1001 class=01:00</span>    <span class="comment">&lt;- virtio-blk</span>
+<span class="accent">[net]</span> Found virtio-net at PCI 00:03.0
+<span class="accent">[net]</span> MAC: 52:54:00:12:34:56
+<span class="accent">[net]</span> Queue 0: 256 entries (RX) | Queue 1: 256 entries (TX)
+<span class="success">[net]</span> <span class="bright">virtio-net: ONLINE (real driver)</span>
+<span class="accent">[net]</span> TCP/IP stack: 10.0.2.15/24, gateway 10.0.2.2
+<span class="success">[storage]</span> <span class="bright">virtio-blk: ONLINE (real driver)</span>
+<span class="info">[crypto]</span> RNG + HMAC-SHA256 + agent signing ready
+<span class="info">[gpu]</span> Inference scheduler initialized
+<span class="warn">[syscall]</span> MSRs configured (EFER.SCE, LSTAR, STAR, SFMASK)
+<span class="info">[syscall]</span> 20 calls registered
+
+<span class="bright">  All subsystems operational</span>
+
+<span class="warn">[cap]</span> Created root #1 for task 1 -> AgentSpawn [D|SPAWN|KILL]
+<span class="warn">[cap]</span> Created root #2 for task 2 -> Agent(4) [W]
+<span class="warn">[cap]</span> Created root #3 for task 3 -> Agent(4) [W]
+
+<span class="success">[demo] Agent supervision tree:</span>
+<span class="bright">|- supervisor</span> [id:1, Running, restarts:0]
+  <span class="info">|- researcher-1</span> [id:2, Running, restarts:0]
+  <span class="info">|- researcher-2</span> [id:3, Running, restarts:0]
+  <span class="accent">|- aggregator</span> [id:4, Running, restarts:0]
+
+<span class="info">[researcher-1]</span> Sent finding #1 to aggregator
+<span class="accent">[aggregator]</span> Received finding #1: <span class="string">{"agent":"researcher-1","topic":"AI alignment"}</span>
+<span class="info">[researcher-2]</span> Sent finding #1 to aggregator
+<span class="accent">[aggregator]</span> Received finding #2: <span class="string">{"agent":"researcher-2","topic":"gradient optimization"}</span>
+<span class="success">[supervisor]</span> Status #1: 4 agents, 4 tasks, tick=509
+<span class="accent">[aggregator]</span> <span class="bright">*** Summary: 5 total findings collected ***</span>
+<span class="info">[researcher-1]</span> Sent finding #3 to aggregator
+<span class="info">[researcher-2]</span> Sent finding #2 to aggregator
+<span class="accent">[aggregator]</span> <span class="bright">*** Summary: 10 total findings collected ***</span>
+        </div>
+    </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="arch">
+    <h2>Architecture</h2>
+    <p class="section-sub">15 kernel modules. 0 external dependencies at runtime.</p>
+
+    <div class="arch-visual">
+<span class="bright">              Agent Swarm</span>
+              <span class="success">supervisor</span> &#x2500;&#x2500; restart policies
+                &#x251c;&#x2500;&#x2500; <span class="info">researcher-1</span>   (Normal priority)
+                &#x251c;&#x2500;&#x2500; <span class="info">researcher-2</span>   (Normal priority)
+                &#x2514;&#x2500;&#x2500; <span class="accent">aggregator</span>     (Normal priority)
+                     &#x2502;
+                 <span class="dim">IPC messages (capability-gated)</span>
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+<span class="bright">         Kernel (5,384 lines Rust)</span>
+
+  <span class="success">Scheduler</span>     <span class="warn">Capability</span>     <span class="info">IPC</span>
+  3-level        System        msg | shm
+  priority      delegate      pub/sub
+  preempt       revoke        req/reply
+
+  <span class="accent">Networking</span>    <span class="purple">Storage</span>       <span class="warn">Crypto</span>
+  smoltcp       OxideFS       HMAC-256
+  HTTP/TCP      blk cache     RNG
+  firewall      KV store      signing
+
+  <span class="info">Syscalls</span>      <span class="success">GPU Sched</span>     <span class="dim">Timer</span>
+  20 calls      priority      deadline
+  x86 MSRs      deadlines     queue
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+<span class="bright">              Hardware</span>
+
+  <span class="accent">PCI Bus</span>  &#x2502;  <span class="success">virtio-net</span>  &#x2502;  <span class="purple">virtio-blk</span>
+  <span class="dim">APIC</span>     &#x2502;  <span class="dim">UART 16550</span>  &#x2502;  <span class="dim">x86_64 CPU</span>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <h2>The infrastructure layer for autonomous AI</h2>
+    <p>Oxide OS is open source. The kernel is real. The vision is bigger.</p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="https://github.com/gkganesh12/oxide-os" class="btn btn-primary">View on GitHub</a>
+        <a href="mailto:gkganesh12@gmail.com" class="btn btn-secondary">Get in touch</a>
+    </div>
+</section>
+
+<footer>
+    <p>Built by <a href="https://github.com/gkganesh12">Ganesh Khetawat</a> &mdash; An operating system where AI agents are not guests. They're the reason the kernel exists.</p>
+</footer>
+
+</body>
+</html>
