@@ -18,8 +18,10 @@ mod qemu;
 mod serial;
 mod crypto;
 mod storage;
+mod syscall;
 mod task;
 mod timer;
+mod userspace;
 
 use core::panic::PanicInfo;
 use limine::BaseRevision;
@@ -98,6 +100,8 @@ extern "C" fn _start() -> ! {
 
     crypto::init();
     timer::init();
+    syscall::init();
+    userspace::init();
 
     // Initialize APIC and timer
     apic::disable_pic();

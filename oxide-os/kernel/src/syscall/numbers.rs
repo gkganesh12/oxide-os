@@ -1,0 +1,22 @@
+pub const SYS_EXIT: u64 = 0;
+pub const SYS_PRINT: u64 = 1;
+pub const SYS_YIELD: u64 = 2;
+pub const SYS_AGENT_SPAWN: u64 = 10;
+pub const SYS_AGENT_KILL: u64 = 11;
+pub const SYS_AGENT_LIST: u64 = 12;
+pub const SYS_AGENT_STATUS: u64 = 13;
+pub const SYS_IPC_SEND: u64 = 20;
+pub const SYS_IPC_RECEIVE: u64 = 21;
+pub const SYS_IPC_REQUEST: u64 = 22;
+pub const SYS_IPC_REPLY: u64 = 23;
+pub const SYS_NET_HTTP_GET: u64 = 30;
+pub const SYS_NET_HTTP_POST: u64 = 31;
+pub const SYS_STORAGE_GET: u64 = 40;
+pub const SYS_STORAGE_SET: u64 = 41;
+pub const SYS_STORAGE_DELETE: u64 = 42;
+pub const SYS_CAP_DELEGATE: u64 = 50;
+pub const SYS_CAP_REVOKE: u64 = 51;
+pub const SYS_TIMER_SLEEP: u64 = 60;
+pub const SYS_TIMER_DEADLINE: u64 = 61;
+
+pub const SYSCALL_COUNT: usize = 20;
