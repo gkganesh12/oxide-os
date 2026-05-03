@@ -10,7 +10,7 @@ all: iso
 
 # Build the kernel
 kernel:
-	cd kernel && cargo build
+	cargo build
 
 # Clone and build Limine bootloader (v8.x binary branch)
 $(LIMINE_DIR):
