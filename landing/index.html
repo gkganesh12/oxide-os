@@ -118,6 +118,25 @@
         footer{text-align:center;padding:2.5rem;border-top:1px solid #111;font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#333}
         footer a{color:var(--r);text-decoration:none}
 
+        /* === ARCH ACCORDION === */
+        .arch-stack{border:1px solid #1a1a1a}
+        .arch-row{border-bottom:1px solid #111;cursor:pointer;transition:background .2s}
+        .arch-row:last-child{border-bottom:none}
+        .arch-row:hover{background:#080808}
+        .arch-row.open{background:#0a0a0a}
+        .arch-head{display:flex;align-items:center;padding:1.5rem 2rem;gap:1rem}
+        .arch-badge{font-family:'IBM Plex Mono',monospace;font-size:.55rem;letter-spacing:2px;padding:.25rem .7rem;color:#000;font-weight:700}
+        .arch-title{font-weight:600;font-size:1.05rem;flex:1}
+        .arch-arrow{font-family:'IBM Plex Mono',monospace;font-size:1.2rem;color:#333;transition:transform .3s}
+        .arch-row.open .arch-arrow{transform:rotate(45deg);color:var(--r)}
+        .arch-detail{max-height:0;overflow:hidden;transition:max-height .5s ease,padding .3s;padding:0 2rem}
+        .arch-row.open .arch-detail{max-height:400px;padding:0 2rem 2rem}
+        .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+        .arch-item{background:#0f0f0f;border:1px solid #1a1a1a;padding:1.2rem;border-radius:2px;transition:border-color .2s}
+        .arch-item:hover{border-color:var(--r)}
+        .arch-item strong{font-size:.85rem;display:block;margin-bottom:.3rem}
+        .arch-item span{font-size:.75rem;color:#555;line-height:1.5}
+
         /* RESPONSIVE */
         @media(max-width:800px){
             .answer-grid{grid-template-columns:1fr}
@@ -214,54 +233,17 @@
 <section class="chapter" id="proof">
     <div class="ch-label reveal">Chapter 03 — The proof</div>
     <h2 class="ch-h reveal reveal-delay-1">Don't take our word for it.<br>Watch it boot.</h2>
-    <p class="ch-p reveal reveal-delay-2">Real serial output. Real PCI discovery. Real virtio drivers. Real agent swarm exchanging messages.</p>
+    <p class="ch-p reveal reveal-delay-2">Every line below is real output from QEMU. Hit play.</p>
 
-    <div class="terminal reveal reveal-delay-3">
+    <div class="terminal reveal reveal-delay-3" id="demo-terminal">
         <div class="t-bar">
             <div class="t-dot r"></div><div class="t-dot y"></div><div class="t-dot g"></div>
-            <span class="t-title">$ make run</span>
+            <span class="t-title">oxide-os — serial console</span>
+            <button id="play-btn" onclick="startDemo()" style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.65rem;background:var(--r);color:#000;border:none;padding:.3rem .8rem;cursor:pointer;letter-spacing:1px;text-transform:uppercase">&#9654; Play</button>
+            <button onclick="resetDemo()" style="font-family:'IBM Plex Mono',monospace;font-size:.65rem;background:#111;color:#666;border:1px solid #222;padding:.3rem .8rem;cursor:pointer;margin-left:.5rem;letter-spacing:1px;text-transform:uppercase">Reset</button>
         </div>
-        <div class="t-body">
-<span class="cw">  ╔══════════════════════════════════════╗
-  ║        Oxide OS v1.2.0               ║
-  ║   Agent-Native Microkernel (Rust)    ║
-  ╚══════════════════════════════════════╝</span>
-
-<span class="cg">[boot]</span> Limine protocol OK | GDT | IDT
-<span class="cb">[memory]</span> 30097/32582 frames free (117 MiB)
-
-<span class="cb">[pci]</span> Scanning bus...
-<span class="cd">[pci]   00:03.0</span> vendor=<span class="cr">1AF4</span>  <span class="cd">← virtio-net</span>
-<span class="cd">[pci]   00:04.0</span> vendor=<span class="cr">1AF4</span>  <span class="cd">← virtio-blk</span>
-
-<span class="cr">[net]</span> Found virtio-net at PCI 00:03.0
-<span class="cr">[net]</span> I/O: 0xC080 | MAC: 52:54:00:12:34:56
-<span class="cr">[net]</span> RX queue: 256 entries | TX queue: 256 entries
-<span class="cg">[net]</span> <span class="cw">virtio-net: ONLINE</span>
-<span class="cb">[net]</span> TCP/IP: 10.0.2.15/24
-
-<span class="cg">[storage]</span> <span class="cw">virtio-blk: ONLINE</span>
-<span class="cb">[crypto]</span> RNG + HMAC-SHA256 + signing
-<span class="cy">[syscall]</span> MSRs wired | 20 calls
-
-<span class="cw">  All subsystems operational ✓</span>
-
-<span class="cy">[cap]</span> #1 → AgentSpawn [<span class="cg">SPAWN|KILL|DELEGATE</span>]
-<span class="cy">[cap]</span> #2 → Agent(4) [<span class="cg">WRITE</span>]
-<span class="cy">[cap]</span> #3 → Agent(4) [<span class="cg">WRITE</span>]
-
-<span class="cw">Agent supervision tree:</span>
-<span class="cw">supervisor</span>
-  ├── <span class="cb">researcher-1</span>  <span class="cg">Running</span>
-  ├── <span class="cb">researcher-2</span>  <span class="cg">Running</span>
-  └── <span class="cr">aggregator</span>    <span class="cg">Running</span>
-
-<span class="cb">[researcher-1]</span> → finding #1
-<span class="cr">[aggregator]</span> ← <span class="cy">{"agent":"researcher-1","topic":"AI alignment"}</span>
-<span class="cb">[researcher-2]</span> → finding #1
-<span class="cr">[aggregator]</span> ← <span class="cy">{"agent":"researcher-2","topic":"gradient optimization"}</span>
-<span class="cg">[supervisor]</span> 4 agents | 4 tasks | tick=509
-<span class="cr">[aggregator]</span> <span class="cw">★ 5 findings collected</span>
+        <div class="t-body" id="demo-output" style="min-height:420px">
+            <span class="cd">Waiting for boot...</span>
         </div>
     </div>
 </section>
@@ -269,39 +251,71 @@
 <!-- ═══ CHAPTER 5: THE ARCHITECTURE ═══ -->
 <section class="chapter" id="arch">
     <div class="ch-label reveal">Chapter 04 — Under the hood</div>
-    <h2 class="ch-h reveal reveal-delay-1">15 modules.<br>Zero dependencies.</h2>
-    <p class="ch-p reveal reveal-delay-2">Peel back each layer. From agents to bare metal.</p>
+    <h2 class="ch-h reveal reveal-delay-1">Peel back each layer</h2>
+    <p class="ch-p reveal reveal-delay-2">Click any layer to explore. From agents down to bare metal.</p>
 
-    <div class="arch-container">
-        <div class="arch-layer reveal">
-            <div class="layer-label">Layer 4 — Agent Swarm</div>
-            <div class="layer-content"><strong>supervisor</strong> → researcher-1, researcher-2, aggregator
-Supervision trees | Restart policies | Capability delegation
-IPC messages flow between agents (cap-gated)</div>
+    <div class="arch-stack reveal reveal-delay-3">
+        <div class="arch-row" onclick="toggleArch(this)" data-layer="4">
+            <div class="arch-head">
+                <span class="arch-badge" style="background:var(--r)">AGENTS</span>
+                <span class="arch-title">Agent Swarm</span>
+                <span class="arch-arrow">+</span>
+            </div>
+            <div class="arch-detail">
+                <div class="arch-grid">
+                    <div class="arch-item"><strong>Supervisor</strong><br><span>Spawn, monitor, restart children</span></div>
+                    <div class="arch-item"><strong>Supervision Tree</strong><br><span>RestartOne / RestartAll / Escalate</span></div>
+                    <div class="arch-item"><strong>Agent Config</strong><br><span>system_prompt, model, tools, caps</span></div>
+                    <div class="arch-item"><strong>Lifecycle</strong><br><span>spawn → run → kill → cleanup</span></div>
+                </div>
+            </div>
         </div>
-        <div class="arch-layer reveal reveal-delay-1">
-            <div class="layer-label">Layer 3 — Kernel Services</div>
-            <div class="layer-content"><strong>Scheduler</strong>  3-level priority, preemptive, fair round-robin
-<strong>Capability</strong> unforgeable tokens, delegate, cascading revoke
-<strong>IPC</strong>        messages | shared memory | pub/sub | req/reply
-<strong>Network</strong>    smoltcp TCP/IP | HTTP | DNS | capability firewall
-<strong>Storage</strong>    OxideFS (content-dedup) | block cache | KV store
-<strong>Crypto</strong>     HMAC-SHA256 | RNG (RDRAND) | per-agent signing</div>
+        <div class="arch-row" onclick="toggleArch(this)" data-layer="3">
+            <div class="arch-head">
+                <span class="arch-badge" style="background:#c0392b">KERNEL</span>
+                <span class="arch-title">Kernel Services</span>
+                <span class="arch-arrow">+</span>
+            </div>
+            <div class="arch-detail">
+                <div class="arch-grid">
+                    <div class="arch-item"><strong>Scheduler</strong><br><span>3-level priority, preemptive, fair</span></div>
+                    <div class="arch-item"><strong>Capabilities</strong><br><span>Unforgeable tokens, delegate, revoke</span></div>
+                    <div class="arch-item"><strong>IPC</strong><br><span>Messages, shared mem, pub/sub, req/rep</span></div>
+                    <div class="arch-item"><strong>Network</strong><br><span>smoltcp TCP/IP, HTTP, DNS, firewall</span></div>
+                    <div class="arch-item"><strong>Storage</strong><br><span>OxideFS, block cache, KV store</span></div>
+                    <div class="arch-item"><strong>Crypto</strong><br><span>HMAC-SHA256, RNG, agent signing</span></div>
+                </div>
+            </div>
         </div>
-        <div class="arch-layer reveal reveal-delay-2">
-            <div class="layer-label">Layer 2 — Kernel Core</div>
-            <div class="layer-content"><strong>Memory</strong>    bitmap frame allocator | 4-level page tables | 1 MiB heap
-<strong>Syscalls</strong>  20 defined | x86_64 MSRs | naked asm entry
-<strong>Timer</strong>     APIC ~400 Hz | TSC clock | deadline queue
-<strong>GDT/IDT</strong>   ring-0 + ring-3 segments | exception handlers</div>
+        <div class="arch-row" onclick="toggleArch(this)" data-layer="2">
+            <div class="arch-head">
+                <span class="arch-badge" style="background:#922">CORE</span>
+                <span class="arch-title">Kernel Core</span>
+                <span class="arch-arrow">+</span>
+            </div>
+            <div class="arch-detail">
+                <div class="arch-grid">
+                    <div class="arch-item"><strong>Memory</strong><br><span>Bitmap frames, 4-level paging, heap</span></div>
+                    <div class="arch-item"><strong>Syscalls</strong><br><span>20 defined, x86_64 MSRs, asm entry</span></div>
+                    <div class="arch-item"><strong>Timer</strong><br><span>APIC ~400Hz, TSC clock, deadlines</span></div>
+                    <div class="arch-item"><strong>GDT / IDT</strong><br><span>Ring-0 + Ring-3, exception handlers</span></div>
+                </div>
+            </div>
         </div>
-        <div class="arch-layer reveal reveal-delay-3">
-            <div class="layer-label">Layer 1 — Hardware</div>
-            <div class="layer-content"><strong>PCI</strong>       full bus enumeration | BAR read | bus mastering
-<strong>virtio-net</strong> split virtqueues (256 RX + TX) | DMA | feature negotiation
-<strong>virtio-blk</strong> 3-descriptor chains | sync block I/O | real disk
-<strong>APIC</strong>       MMIO mapped | periodic timer | EOI
-<strong>UART</strong>       16550 serial | deadlock-free panic output</div>
+        <div class="arch-row" onclick="toggleArch(this)" data-layer="1">
+            <div class="arch-head">
+                <span class="arch-badge" style="background:#611">HARDWARE</span>
+                <span class="arch-title">Bare Metal</span>
+                <span class="arch-arrow">+</span>
+            </div>
+            <div class="arch-detail">
+                <div class="arch-grid">
+                    <div class="arch-item"><strong>PCI Bus</strong><br><span>Full enumeration, BAR, bus mastering</span></div>
+                    <div class="arch-item"><strong>virtio-net</strong><br><span>256-entry split virtqueues, DMA</span></div>
+                    <div class="arch-item"><strong>virtio-blk</strong><br><span>3-desc chains, sync block I/O</span></div>
+                    <div class="arch-item"><strong>APIC / UART</strong><br><span>MMIO timer, 16550 serial output</span></div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -359,6 +373,129 @@ const observer = new IntersectionObserver((entries) => {
 }, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
 
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// === ARCHITECTURE ACCORDION ===
+function toggleArch(row) {
+    const wasOpen = row.classList.contains('open');
+    document.querySelectorAll('.arch-row').forEach(r => r.classList.remove('open'));
+    if (!wasOpen) row.classList.add('open');
+}
+
+// === BOOT DEMO TYPEWRITER ===
+const bootLines = [
+    { text: '', delay: 0 },
+    { text: '  ╔══════════════════════════════════════╗', cls: 'cw', delay: 100 },
+    { text: '  ║        Oxide OS v1.2.0               ║', cls: 'cw', delay: 50 },
+    { text: '  ║   Agent-Native Microkernel (Rust)    ║', cls: 'cw', delay: 50 },
+    { text: '  ╚══════════════════════════════════════╝', cls: 'cw', delay: 50 },
+    { text: '', delay: 200 },
+    { text: '[boot] Limine protocol OK', cls: 'cg', delay: 80 },
+    { text: '[boot] GDT loaded', cls: 'cg', delay: 60 },
+    { text: '[boot] IDT loaded', cls: 'cg', delay: 60 },
+    { text: '[memory] 30097/32582 frames free (117 MiB)', cls: 'cb', delay: 100 },
+    { text: '', delay: 150 },
+    { text: '[pci] Scanning bus...', cls: 'cb', delay: 300 },
+    { text: '[pci]   00:03.0 vendor=1AF4 device=1000    ← virtio-net', cls: 'cd', delay: 80 },
+    { text: '[pci]   00:04.0 vendor=1AF4 device=1001    ← virtio-blk', cls: 'cd', delay: 80 },
+    { text: '', delay: 150 },
+    { text: '[net] Found virtio-net at PCI 00:03.0', cls: 'cr', delay: 100 },
+    { text: '[net] I/O: 0xC080 | MAC: 52:54:00:12:34:56', cls: 'cr', delay: 80 },
+    { text: '[net] RX: 256 entries | TX: 256 entries', cls: 'cr', delay: 80 },
+    { text: '[net] virtio-net: ONLINE ■', cls: 'cw', delay: 200, highlight: true },
+    { text: '[net] TCP/IP: 10.0.2.15/24', cls: 'cb', delay: 80 },
+    { text: '', delay: 100 },
+    { text: '[storage] virtio-blk: ONLINE ■', cls: 'cw', delay: 200, highlight: true },
+    { text: '[crypto] RNG + HMAC-SHA256 + signing', cls: 'cb', delay: 80 },
+    { text: '[syscall] MSRs wired | 20 calls registered', cls: 'cy', delay: 100 },
+    { text: '', delay: 150 },
+    { text: '  ✓ All subsystems operational', cls: 'cw', delay: 400, highlight: true },
+    { text: '', delay: 300 },
+    { text: '[cap] #1 → AgentSpawn [SPAWN|KILL|DELEGATE]', cls: 'cy', delay: 80 },
+    { text: '[cap] #2 → Agent(4) [WRITE]', cls: 'cy', delay: 60 },
+    { text: '[cap] #3 → Agent(4) [WRITE]', cls: 'cy', delay: 60 },
+    { text: '', delay: 200 },
+    { text: 'Agent supervision tree:', cls: 'cw', delay: 100 },
+    { text: '├── supervisor      [Running]', cls: 'cw', delay: 80 },
+    { text: '│   ├── researcher-1  [Running]', cls: 'cb', delay: 80 },
+    { text: '│   ├── researcher-2  [Running]', cls: 'cb', delay: 80 },
+    { text: '│   └── aggregator    [Running]', cls: 'cr', delay: 80 },
+    { text: '', delay: 300 },
+    { text: '[researcher-1] → sent finding #1', cls: 'cb', delay: 120 },
+    { text: '[aggregator]   ← {"agent":"researcher-1","topic":"AI alignment"}', cls: 'cy', delay: 150 },
+    { text: '[researcher-2] → sent finding #1', cls: 'cb', delay: 120 },
+    { text: '[aggregator]   ← {"agent":"researcher-2","topic":"gradient optimization"}', cls: 'cy', delay: 150 },
+    { text: '[supervisor] Status: 4 agents | 4 tasks | tick=509', cls: 'cg', delay: 200 },
+    { text: '', delay: 100 },
+    { text: '[aggregator] ★ 5 total findings collected', cls: 'cw', delay: 300, highlight: true },
+    { text: '[researcher-1] → sent finding #2', cls: 'cb', delay: 120 },
+    { text: '[aggregator]   ← {"agent":"researcher-1","finding":2}', cls: 'cy', delay: 150 },
+    { text: '[researcher-2] → sent finding #2', cls: 'cb', delay: 120 },
+    { text: '[supervisor] Status: 4 agents | 4 tasks | tick=1009', cls: 'cg', delay: 200 },
+    { text: '[aggregator] ★ 10 total findings collected', cls: 'cw', delay: 300, highlight: true },
+];
+
+let demoRunning = false;
+
+function startDemo() {
+    if (demoRunning) return;
+    demoRunning = true;
+    const output = document.getElementById('demo-output');
+    const btn = document.getElementById('play-btn');
+    btn.textContent = '● LIVE';
+    btn.style.background = '#51cf66';
+    output.innerHTML = '';
+
+    let i = 0;
+    function nextLine() {
+        if (i >= bootLines.length) {
+            demoRunning = false;
+            btn.textContent = '✓ Done';
+            btn.style.background = '#333';
+            return;
+        }
+        const line = bootLines[i];
+        const el = document.createElement('div');
+        if (line.highlight) {
+            el.style.background = 'rgba(230,57,70,0.08)';
+            el.style.padding = '2px 4px';
+            el.style.margin = '0 -4px';
+        }
+        el.className = line.cls || '';
+        el.textContent = line.text;
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-5px)';
+        el.style.transition = 'opacity .15s, transform .15s';
+        output.appendChild(el);
+        requestAnimationFrame(() => {
+            el.style.opacity = '1';
+            el.style.transform = 'translateX(0)';
+        });
+        output.scrollTop = output.scrollHeight;
+        i++;
+        setTimeout(nextLine, line.delay + 30);
+    }
+    nextLine();
+}
+
+function resetDemo() {
+    demoRunning = false;
+    const output = document.getElementById('demo-output');
+    const btn = document.getElementById('play-btn');
+    output.innerHTML = '<span class="cd">Waiting for boot...</span>';
+    btn.textContent = '▶ Play';
+    btn.style.background = 'var(--r)';
+}
+
+// Auto-play demo when it scrolls into view
+const demoObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && !demoRunning) {
+            startDemo();
+            demoObserver.unobserve(entry.target);
+        }
+    });
+}, { threshold: 0.5 });
+demoObserver.observe(document.getElementById('demo-terminal'));
 </script>
 </body>
 </html>
