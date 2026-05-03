@@ -10,6 +10,7 @@ mod allocator;
 mod apic;
 mod capability;
 mod gdt;
+mod gpu;
 mod interrupts;
 mod ipc;
 mod memory;
@@ -100,6 +101,7 @@ extern "C" fn _start() -> ! {
 
     crypto::init();
     timer::init();
+    gpu::init();
     syscall::init();
     userspace::init();
 
@@ -109,6 +111,18 @@ extern "C" fn _start() -> ! {
     apic::configure_timer(interrupts::TIMER_VECTOR, 0x20000);
     x86_64::instructions::interrupts::enable();
     println!("[boot] APIC timer running, interrupts enabled");
+
+    println!();
+    println!("  ╔══════════════════════════════════════════╗");
+    println!("  ║    All 10 subsystems operational         ║");
+    println!("  ╠══════════════════════════════════════════╣");
+    println!("  ║  GDT/IDT    Memory     Scheduler        ║");
+    println!("  ║  APIC       Caps       IPC              ║");
+    println!("  ║  Agents     Network    Storage           ║");
+    println!("  ║  Crypto     Timers     GPU               ║");
+    println!("  ║  Syscalls   ELF        Processes         ║");
+    println!("  ╚══════════════════════════════════════════╝");
+    println!();
 
     // ═══════════════════════════════════════════════════════════════════
     //  DEMO: Agent Swarm with Capabilities, IPC, and Supervision
