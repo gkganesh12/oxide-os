@@ -59,7 +59,7 @@ extern "C" fn _start() -> ! {
 
     println!();
     println!("  ╔══════════════════════════════════════╗");
-    println!("  ║        Oxide OS v0.1.0               ║");
+    println!("  ║        Oxide OS v0.5.0               ║");
     println!("  ║   Agent-Native Microkernel (Rust)    ║");
     println!("  ╚══════════════════════════════════════╝");
     println!();
@@ -95,116 +95,242 @@ extern "C" fn _start() -> ! {
     x86_64::instructions::interrupts::enable();
     println!("[boot] APIC timer running, interrupts enabled");
 
-    // Set up IPC test: create capabilities and spawn tasks that communicate
-    let (sender_cap, receiver_cap) = {
-        use capability::{CAP_TABLE, PermissionBits, ResourceRef};
-        let mut table = CAP_TABLE.lock();
-        // Cap for task 1 (sender) to write to task 2 (receiver)
-        let sc = table.create_root(1, ResourceRef::Agent(2), PermissionBits::WRITE.union(PermissionBits::DELEGATE));
-        // Cap for task 2 (receiver) — can read
-        let rc = table.create_root(2, ResourceRef::Agent(1), PermissionBits::READ);
-        (sc, rc)
-    };
-    let _ = (sender_cap, receiver_cap); // Used by tasks via global knowledge of their IDs
+    // ═══════════════════════════════════════════════════════════════════
+    //  DEMO: Agent Swarm with Capabilities, IPC, and Supervision
+    // ═══════════════════════════════════════════════════════════════════
 
-    // Register mailboxes before spawning tasks
-    ipc::message::register_mailbox(1);
-    ipc::message::register_mailbox(2);
-    ipc::message::register_mailbox(3);
-
-    // Spawn tasks
-    {
-        use task::{Task, Priority};
-        use task::scheduler::SCHEDULER;
-        use alloc::string::String;
-
-        let mut sched = SCHEDULER.lock();
-        sched.spawn(Task::new(String::from("sender"), Priority::Normal, task_sender, &mut mapper));
-        sched.spawn(Task::new(String::from("receiver"), Priority::Normal, task_receiver, &mut mapper));
-        sched.spawn(Task::new(String::from("worker"), Priority::Background, task_worker, &mut mapper));
-        sched.print_stats();
-    }
-
-    println!("[boot] Scheduler active — IPC test running");
+    println!("[demo] Setting up agent swarm...");
     println!();
 
-    // Idle loop — yields to tasks when reschedule is pending
+    // 1. Create capabilities for the agent swarm
+    //    - Supervisor (task 1) can spawn and communicate with all agents
+    //    - Research agents (tasks 2,3) can write to aggregator (task 4)
+    //    - Aggregator (task 4) can publish to the "results" channel
+    {
+        use capability::{CAP_TABLE, PermissionBits, ResourceRef};
+        use alloc::string::String;
+
+        let mut table = CAP_TABLE.lock();
+
+        // Supervisor caps
+        table.create_root(1, ResourceRef::AgentSpawn,
+            PermissionBits::SPAWN.union(PermissionBits::KILL).union(PermissionBits::DELEGATE));
+
+        // Research agent 1 → can write to aggregator (task 4)
+        table.create_root(2, ResourceRef::Agent(4), PermissionBits::WRITE);
+
+        // Research agent 2 → can write to aggregator (task 4)
+        table.create_root(3, ResourceRef::Agent(4), PermissionBits::WRITE);
+
+        // Aggregator → can publish to "results" channel
+        table.create_root(4, ResourceRef::Channel { name: String::from("results") },
+            PermissionBits::PUBLISH);
+
+        // Aggregator → can read from any agent
+        table.create_root(4, ResourceRef::Agent(0), PermissionBits::READ);
+    }
+
+    // 2. Create pub/sub channel
+    ipc::channel::create(alloc::string::String::from("results"));
+
+    // 3. Register mailboxes
+    for id in 1..=4 {
+        ipc::message::register_mailbox(id);
+    }
+
+    // 4. Spawn agents using the agent lifecycle system
+    {
+        use agent::{AgentConfig, ModelBinding, RestartPolicy, ResourceLimits};
+        use alloc::string::String;
+        use alloc::vec;
+
+        // Supervisor agent
+        let supervisor_config = AgentConfig {
+            name: String::from("supervisor"),
+            system_prompt: Some(String::from("Manage the research swarm")),
+            model: ModelBinding::Auto { preference: vec![String::from("gpt-4")] },
+            tools: vec![],
+            capabilities: vec![1], // spawn+kill cap
+            restart_policy: RestartPolicy::Permanent,
+            resource_limits: ResourceLimits::default(),
+        };
+        agent::lifecycle::spawn(None, supervisor_config, agent_supervisor, &mut mapper)
+            .expect("failed to spawn supervisor");
+
+        // Research agent 1
+        let research1_config = AgentConfig {
+            name: String::from("researcher-1"),
+            system_prompt: Some(String::from("Research AI safety papers")),
+            model: ModelBinding::Remote { endpoint: String::from("https://api.openai.com/v1/chat"), api_key_cap: 0 },
+            tools: vec![String::from("web-fetch")],
+            capabilities: vec![2], // write to aggregator
+            restart_policy: RestartPolicy::RestartOne,
+            resource_limits: ResourceLimits::default(),
+        };
+        agent::lifecycle::spawn(Some(1), research1_config, agent_researcher_1, &mut mapper)
+            .expect("failed to spawn researcher-1");
+
+        // Research agent 2
+        let research2_config = AgentConfig {
+            name: String::from("researcher-2"),
+            system_prompt: Some(String::from("Research ML optimization techniques")),
+            model: ModelBinding::Remote { endpoint: String::from("https://api.openai.com/v1/chat"), api_key_cap: 0 },
+            tools: vec![String::from("web-fetch")],
+            capabilities: vec![3], // write to aggregator
+            restart_policy: RestartPolicy::RestartOne,
+            resource_limits: ResourceLimits::default(),
+        };
+        agent::lifecycle::spawn(Some(1), research2_config, agent_researcher_2, &mut mapper)
+            .expect("failed to spawn researcher-2");
+
+        // Aggregator agent
+        let aggregator_config = AgentConfig {
+            name: String::from("aggregator"),
+            system_prompt: Some(String::from("Collect and summarize research findings")),
+            model: ModelBinding::Auto { preference: vec![String::from("gpt-4")] },
+            tools: vec![],
+            capabilities: vec![4, 5], // publish + read
+            restart_policy: RestartPolicy::RestartOne,
+            resource_limits: ResourceLimits::default(),
+        };
+        agent::lifecycle::spawn(Some(1), aggregator_config, agent_aggregator, &mut mapper)
+            .expect("failed to spawn aggregator");
+    }
+
+    // 5. Print the agent tree
+    println!();
+    println!("[demo] Agent supervision tree:");
+    agent::registry::REGISTRY.lock().print_tree();
+    println!();
+
+    // Print scheduler stats
+    task::scheduler::SCHEDULER.lock().print_stats();
+    println!();
+    println!("[demo] Swarm running — agents communicating via IPC");
+    println!("═══════════════════════════════════════════════════════════");
+    println!();
+
+    // Idle loop
     loop {
-        x86_64::instructions::hlt(); // Sleep until next interrupt
+        x86_64::instructions::hlt();
         if task::scheduler::should_reschedule() {
             task::scheduler::yield_now();
         }
     }
 }
 
-// --- IPC Test Tasks ---
+// ═══════════════════════════════════════════════════════════════════════
+//  Agent Entry Functions
+// ═══════════════════════════════════════════════════════════════════════
 
-/// Sender task: sends messages to the receiver every ~200 ticks.
-fn task_sender() -> ! {
+/// Supervisor agent — monitors the swarm, prints status periodically.
+fn agent_supervisor() -> ! {
+    println!("[supervisor] Online — monitoring swarm");
+    let mut report_num = 0u32;
+
+    loop {
+        // Print status every ~500 ticks
+        let target = interrupts::ticks() + 500;
+        while interrupts::ticks() < target {
+            if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
+        }
+
+        report_num += 1;
+        let agent_count = agent::registry::REGISTRY.lock().count();
+        let task_count = task::scheduler::SCHEDULER.lock().task_count();
+        println!("[supervisor] Status #{}: {} agents, {} tasks, tick={}",
+            report_num, agent_count, task_count, interrupts::ticks());
+    }
+}
+
+/// Research agent 1 — simulates finding research results and sending to aggregator.
+fn agent_researcher_1() -> ! {
     use ipc::{MessageType, message};
 
-    // Get our capability to talk to task 2 (receiver)
-    // Task 1's cap to write to task 2 is cap #1 (created in boot)
-    let my_cap: u64 = 1;
-    let mut msg_count = 0u32;
+    println!("[researcher-1] Starting research on AI safety...");
+    let my_cap: u64 = 2; // Cap to write to aggregator (task 4)
+    let mut finding_num = 0u32;
 
-    // Wait a bit for receiver to start
-    let mut warmup = 0u64;
-    loop {
-        warmup += 1;
-        if warmup > 500_000 { break; }
+    // Initial delay
+    let target = interrupts::ticks() + 100;
+    while interrupts::ticks() < target {
         if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
     }
 
     loop {
-        msg_count += 1;
-        let payload = alloc::format!("Hello #{}", msg_count).into_bytes();
+        finding_num += 1;
+        let payload = alloc::format!(
+            "{{\"agent\":\"researcher-1\",\"finding\":{},\"topic\":\"AI alignment\"}}",
+            finding_num
+        ).into_bytes();
 
-        match message::send(1, 2, MessageType::Data, payload, None, None, my_cap) {
-            Ok(msg_id) => {
-                println!("[sender] Sent message #{} (id={}) to receiver", msg_count, msg_id.0);
-            }
-            Err(e) => {
-                println!("[sender] ERROR sending: {:?}", e);
-            }
+        match message::send(2, 4, MessageType::Data, payload, None, None, my_cap) {
+            Ok(_) => println!("[researcher-1] Sent finding #{} to aggregator", finding_num),
+            Err(e) => println!("[researcher-1] Send error: {:?}", e),
         }
 
-        // Wait ~200 ticks before next message
-        let target = interrupts::ticks() + 200;
+        // Research takes time...
+        let target = interrupts::ticks() + 300;
         while interrupts::ticks() < target {
             if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
         }
     }
 }
 
-/// Receiver task: polls for messages and prints them.
-fn task_receiver() -> ! {
-    use ipc::message;
+/// Research agent 2 — different research topic, same pattern.
+fn agent_researcher_2() -> ! {
+    use ipc::{MessageType, message};
 
-    let mut received = 0u32;
+    println!("[researcher-2] Starting research on ML optimization...");
+    let my_cap: u64 = 3; // Cap to write to aggregator (task 4)
+    let mut finding_num = 0u32;
+
+    // Staggered start
+    let target = interrupts::ticks() + 200;
+    while interrupts::ticks() < target {
+        if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
+    }
 
     loop {
-        // Check for messages
-        if let Some(msg) = message::receive(2) {
-            received += 1;
-            let text = core::str::from_utf8(&msg.payload).unwrap_or("<binary>");
-            println!("[receiver] Got message from task {}: \"{}\" (total: {})", msg.sender, text, received);
+        finding_num += 1;
+        let payload = alloc::format!(
+            "{{\"agent\":\"researcher-2\",\"finding\":{},\"topic\":\"gradient optimization\"}}",
+            finding_num
+        ).into_bytes();
+
+        match message::send(3, 4, MessageType::Data, payload, None, None, my_cap) {
+            Ok(_) => println!("[researcher-2] Sent finding #{} to aggregator", finding_num),
+            Err(e) => println!("[researcher-2] Send error: {:?}", e),
         }
 
-        if task::scheduler::should_reschedule() {
-            task::scheduler::yield_now();
+        // Different research cadence
+        let target = interrupts::ticks() + 400;
+        while interrupts::ticks() < target {
+            if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
         }
     }
 }
 
-/// Background worker — just counts to prove Background priority works.
-fn task_worker() -> ! {
-    let mut count = 0u64;
+/// Aggregator agent — collects findings from researchers, logs summaries.
+fn agent_aggregator() -> ! {
+    use ipc::message;
+
+    println!("[aggregator] Online — waiting for research findings...");
+    let mut total_findings = 0u32;
+
     loop {
-        count += 1;
-        if count % 5_000_000 == 0 {
-            println!("[worker BG] tick={} alive, iterations={}", interrupts::ticks(), count);
+        // Check for incoming messages from researchers
+        while let Some(msg) = message::receive(4) {
+            total_findings += 1;
+            let text = core::str::from_utf8(&msg.payload).unwrap_or("<binary>");
+            println!("[aggregator] Received finding #{} from task {}: {}",
+                total_findings, msg.sender, text);
+
+            if total_findings % 5 == 0 {
+                println!("[aggregator] *** Summary: {} total findings collected ***", total_findings);
+            }
         }
+
         if task::scheduler::should_reschedule() {
             task::scheduler::yield_now();
         }
