@@ -4,7 +4,27 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 9: User-Space & Management (Next)
+### Phase 10: Inference & Dashboard (Next)
+
+---
+
+## [0.9.0] - 2026-05-03
+
+### Phase 9: User-Space & Management
+
+**Added:**
+- Syscall dispatch table with 20 defined syscall numbers
+- 11 implemented handlers: exit, print, yield, agent_list, agent_status, agent_kill, ipc_send, ipc_receive, storage_set, storage_get, sleep
+- Input validation on all syscall handlers (null checks, length limits)
+- ELF64 loader: header parsing, magic validation, program header enumeration
+- Process struct for future user-space isolation
+- All handlers integrated with existing kernel subsystems (agents, IPC, storage, timer)
+
+**Architecture decisions:**
+- Syscall handlers are kernel-callable functions (will be wired to `syscall` instruction in hardening phase)
+- Print syscall caps output at 4 KiB (prevent kernel log flooding)
+- IPC send caps payload at 64 KiB
+- Storage key capped at 256 bytes, value at 64 KiB
 
 ---
 
