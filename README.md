@@ -2,7 +2,7 @@
 
 **An agent-native microkernel operating system written from scratch in Rust.**
 
-Built for running AI agent swarms with kernel-level isolation, capability-based security, and real hardware drivers. 5,148 lines of Rust. Boots on bare metal via QEMU.
+Built for running AI agent swarms with kernel-level isolation, capability-based security, and real hardware drivers. Built in Rust. Boots on bare metal via QEMU.
 
 ---
 
