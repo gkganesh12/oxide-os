@@ -10,6 +10,7 @@ mod apic;
 mod capability;
 mod gdt;
 mod interrupts;
+mod ipc;
 mod memory;
 mod qemu;
 mod serial;
