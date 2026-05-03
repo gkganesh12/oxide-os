@@ -73,10 +73,15 @@ pub fn collect_reply(msg_id: MessageId) -> Option<message::Message> {
     REPLIES.lock().remove(&msg_id.0)
 }
 
-/// Check for timed-out requests. Called from timer or periodic task.
+/// Check for timed-out requests. Called from timer interrupt — uses try_lock
+/// to avoid deadlock if PENDING is held by a task.
 pub fn check_timeouts() {
+    let mut pending = match PENDING.try_lock() {
+        Some(p) => p,
+        None => return, // Lock held, skip this check
+    };
+
     let current_tick = interrupts::ticks();
-    let mut pending = PENDING.lock();
 
     let expired: Vec<u64> = pending.iter()
         .filter(|(_, req)| current_tick >= req.deadline_tick)

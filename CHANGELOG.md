@@ -4,7 +4,34 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 4: IPC (Next)
+### Phase 5: Agent Lifecycle (Next)
+
+---
+
+## [0.4.0] - 2026-05-03
+
+### Phase 4: IPC (Inter-Process Communication)
+
+**Added:**
+- Async message passing with per-task mailboxes (bounded, 256 capacity)
+- `send()` / `receive()` with capability validation on every message
+- Shared memory regions with physical frame allocation and cap-gated grants
+- Pub/sub named channels with subscribe/publish (best-effort delivery)
+- Synchronous request/reply with tick-based timeout
+- Capability transfer via IPC messages (delegate on send)
+- `check_timeouts()` integrated into timer interrupt (every 50 ticks)
+- `register_mailbox()` / `unregister_mailbox()` for task lifecycle
+- Recipient wake-on-message for blocked tasks
+
+**Fixed:**
+- `check_timeouts()` uses `try_lock` (prevents deadlock from ISR context)
+
+**Architecture decisions:**
+- Messages are kernel-buffered (copied, not zero-copy for data messages)
+- Shared memory is zero-copy (both tasks map same physical frames)
+- Pub/sub is best-effort (full mailbox = message dropped for that subscriber)
+- All IPC operations gated by capability system
+- Lock ordering: CAP_TABLE → MAILBOXES → SCHEDULER (prevents deadlock)
 
 ---
 
