@@ -86,6 +86,9 @@ extern "C" fn _start() -> ! {
         panic!("Memory map not available");
     }
 
+    let _mapper = unsafe { memory::paging::init(hhdm_offset) };
+    println!("[boot] Page tables initialized.");
+
     println!("[boot] Kernel halted.");
     hcf();
 }
