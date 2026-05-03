@@ -37,15 +37,22 @@ iso: kernel $(LIMINE_DIR)
 		iso_root -o $(ISO)
 	./$(LIMINE_DIR)/limine bios-install $(ISO)
 
-# Run in QEMU
+# QEMU network options: user-mode networking with virtio-net-pci
+QEMU_NET := -netdev user,id=net0 -device virtio-net-pci,netdev=net0
+
+# Run in QEMU with networking
 run: iso
-	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown
+	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown $(QEMU_NET)
+
+# Run headless (serial only, no GUI)
+run-headless: iso
+	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown -display none $(QEMU_NET)
 
 # Run in QEMU with test exit device (for automated testing)
 test: iso
 	qemu-system-x86_64 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown \
 		-device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-		-display none
+		-display none $(QEMU_NET)
 
 # Clean build artifacts
 clean:

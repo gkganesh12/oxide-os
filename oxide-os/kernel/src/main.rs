@@ -15,6 +15,7 @@ mod interrupts;
 mod ipc;
 mod memory;
 mod net;
+mod pci;
 mod qemu;
 mod serial;
 mod crypto;
@@ -95,6 +96,7 @@ extern "C" fn _start() -> ! {
 
     allocator::init(&mut mapper);
 
+    pci::init();
     net::init(hhdm_offset);
 
     storage::init(hhdm_offset);
