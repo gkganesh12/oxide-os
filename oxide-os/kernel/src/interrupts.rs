@@ -40,6 +40,7 @@ pub fn ticks() -> u64 {
 extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
     apic::eoi();
+    crate::task::scheduler::timer_tick();
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
