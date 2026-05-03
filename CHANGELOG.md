@@ -4,7 +4,33 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 3: Capability System (Next)
+### Phase 4: IPC (Next)
+
+---
+
+## [0.3.0] - 2026-05-03
+
+### Phase 3: Capability System
+
+**Added:**
+- `PermissionBits` bitfield: READ, WRITE, EXECUTE, DELEGATE, SPAWN, KILL, SUBSCRIBE, PUBLISH, CONNECT
+- `ResourceRef` enum: Agent, Memory, Network, Storage, Channel, Tool, Model, AgentSpawn, System
+- `CapabilityTable`: global kernel capability store with O(1) lookup by ID
+- `create_root()`: create system-level capabilities at boot
+- `validate()`: check task ownership + permission bits on every access
+- `delegate()`: create child capability with subset permissions + resource narrowing
+- `revoke()`: cascading revocation (revoke parent → all children revoked)
+- Per-task capability set: `has_capability()`, `grant_capability()`, `revoke_capability()`
+- Kernel logging for all capability operations
+- Memory region subset validation (child region must be within parent)
+- Network wildcard (host=`*`, port=0 means any) for delegation
+- Storage path-prefix validation for delegation
+
+**Architecture decisions:**
+- Capabilities are unforgeable kernel objects (indices into table)
+- No ambient authority: zero capabilities = can do nothing
+- Ownership stored in capability (table-side), mirrored in task (task-side)
+- `spin::Mutex<CapabilityTable>` for thread-safe access
 
 ---
 
