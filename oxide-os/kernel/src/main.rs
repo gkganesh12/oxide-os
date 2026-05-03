@@ -4,6 +4,7 @@
 
 mod gdt;
 mod interrupts;
+mod memory;
 mod serial;
 
 use core::panic::PanicInfo;
@@ -40,7 +41,8 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 static MEMMAP_REQUEST: MemmapRequest = MemmapRequest::new();
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    println!("KERNEL PANIC: {}", info);
     loop {
         core::hint::spin_loop();
     }
@@ -71,22 +73,17 @@ extern "C" fn _start() -> ! {
     interrupts::init();
     println!("[boot] IDT initialized.");
 
-    // Print memory map information.
+    // Initialize memory subsystem.
+    let hhdm_offset = HHDM_REQUEST.response()
+        .expect("HHDM response missing")
+        .offset;
+
     if let Some(response) = MEMMAP_REQUEST.response() {
         let entries = response.entries();
-        let mut usable_bytes: u64 = 0;
-        for entry in entries {
-            if entry.type_ == limine::memmap::MEMMAP_USABLE {
-                usable_bytes += entry.length;
-            }
-        }
-        println!(
-            "[boot] Memory map: {} entries, {} MiB usable.",
-            entries.len(),
-            usable_bytes / (1024 * 1024)
-        );
+        println!("[boot] Memory map: {} entries.", entries.len());
+        memory::frame_allocator::init(entries, hhdm_offset);
     } else {
-        println!("[boot] WARNING: No memory map response from bootloader.");
+        panic!("Memory map not available");
     }
 
     println!("[boot] Kernel halted.");
