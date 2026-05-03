@@ -139,6 +139,19 @@ pub fn init(entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
     let bitmap_frame_count = ((bitmap_size as u64 + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
     allocator.mark_region_used(bitmap_start_frame, bitmap_frame_count);
 
+    // Mark kernel and bootloader-reclaimable regions as used (protect kernel memory)
+    for entry in entries.iter() {
+        let is_protected = entry.type_ == limine::memmap::MEMMAP_BOOTLOADER_RECLAIMABLE
+            || entry.type_ == limine::memmap::MEMMAP_EXECUTABLE_AND_MODULES;
+        if is_protected {
+            let start_frame = (entry.base / PAGE_SIZE) as usize;
+            let count = (entry.length / PAGE_SIZE) as usize;
+            if start_frame < total_frames {
+                allocator.mark_region_used(start_frame, count);
+            }
+        }
+    }
+
     let (free, total) = allocator.stats();
     println!("[memory] Frame allocator: {}/{} frames free ({} MiB free)", free, total, free * 4096 / 1024 / 1024);
 

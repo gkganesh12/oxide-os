@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 
 extern crate alloc;
 
@@ -46,7 +47,8 @@ static MEMMAP_REQUEST: MemmapRequest = MemmapRequest::new();
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("KERNEL PANIC: {}", info);
+    // Use panic_println to bypass serial lock (avoids deadlock if we panicked while printing)
+    panic_println!("KERNEL PANIC: {}", info);
     loop {
         core::hint::spin_loop();
     }

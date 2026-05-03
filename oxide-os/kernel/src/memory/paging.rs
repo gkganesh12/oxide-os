@@ -2,7 +2,7 @@ use x86_64::structures::paging::{
     FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags,
     PhysFrame, Size4KiB,
 };
-use x86_64::{PhysAddr, VirtAddr};
+use x86_64::VirtAddr;
 use crate::memory::frame_allocator::FRAME_ALLOCATOR;
 
 /// Frame allocator wrapper for use with x86_64 crate's Mapper trait.

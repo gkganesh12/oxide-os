@@ -6,12 +6,15 @@ use spin::Lazy;
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 const STACK_SIZE: usize = 4096 * 5;
 
-static mut DOUBLE_FAULT_STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+/// Double-fault stack — uses a static array with a wrapper to avoid `static mut`.
+#[repr(C, align(4096))]
+struct Stack([u8; STACK_SIZE]);
+static DOUBLE_FAULT_STACK: Stack = Stack([0; STACK_SIZE]);
 
 static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     let mut tss = TaskStateSegment::new();
     tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
-        let stack_start = VirtAddr::from_ptr(&raw const DOUBLE_FAULT_STACK);
+        let stack_start = VirtAddr::from_ptr(&DOUBLE_FAULT_STACK.0);
         stack_start + STACK_SIZE as u64
     };
     tss

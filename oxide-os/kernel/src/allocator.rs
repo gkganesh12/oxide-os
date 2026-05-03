@@ -1,8 +1,14 @@
+use core::alloc::Layout;
 use linked_list_allocator::LockedHeap;
 use x86_64::structures::paging::{Page, PageTableFlags, OffsetPageTable, Size4KiB};
 use x86_64::VirtAddr;
 use crate::memory::paging;
 use crate::println;
+
+#[alloc_error_handler]
+fn alloc_error(layout: Layout) -> ! {
+    panic!("kernel heap allocation failed: size={}, align={}", layout.size(), layout.align());
+}
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
