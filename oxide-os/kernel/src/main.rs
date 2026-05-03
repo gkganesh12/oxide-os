@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+mod agent;
 mod allocator;
 mod apic;
 mod capability;
