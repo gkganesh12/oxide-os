@@ -16,6 +16,7 @@ mod memory;
 mod net;
 mod qemu;
 mod serial;
+mod storage;
 mod task;
 
 use core::panic::PanicInfo;
@@ -90,6 +91,8 @@ extern "C" fn _start() -> ! {
     allocator::init(&mut mapper);
 
     net::init(hhdm_offset);
+
+    storage::init(hhdm_offset);
 
     // Initialize APIC and timer
     apic::disable_pic();
