@@ -40,6 +40,14 @@ pub fn get(url: &str, task_id: TaskId, net_cap: CapId) -> Result<HttpResponse, H
         return Err(HttpError::FirewallDenied);
     }
 
+    // Check if HTTPS is required
+    if port == 443 {
+        crate::println!("[http] HTTPS requested — TLS handshake needed");
+        if !super::tls::is_available() {
+            crate::println!("[http] TLS not yet available, falling back to plaintext");
+        }
+    }
+
     // Resolve DNS
     let addr = super::dns::resolve(&host).ok_or(HttpError::DnsResolutionFailed)?;
 
@@ -117,6 +125,14 @@ pub fn post(url: &str, body: &[u8], task_id: TaskId, net_cap: CapId) -> Result<H
         return Err(HttpError::FirewallDenied);
     }
 
+    // Check if HTTPS is required
+    if port == 443 {
+        crate::println!("[http] HTTPS requested — TLS handshake needed");
+        if !super::tls::is_available() {
+            crate::println!("[http] TLS not yet available, falling back to plaintext");
+        }
+    }
+
     // Resolve DNS
     let addr = super::dns::resolve(&host).ok_or(HttpError::DnsResolutionFailed)?;
 
@@ -187,6 +203,7 @@ pub fn post(url: &str, body: &[u8], task_id: TaskId, net_cap: CapId) -> Result<H
 }
 
 fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
+    let default_port: u16 = if url.starts_with("https://") { 443 } else { 80 };
     let url = url.strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
@@ -197,9 +214,9 @@ fn parse_url(url: &str) -> Result<(String, u16, String), HttpError> {
     let (host, port) = match host_port.find(':') {
         Some(i) => (
             String::from(&host_port[..i]),
-            host_port[i+1..].parse::<u16>().unwrap_or(80),
+            host_port[i+1..].parse::<u16>().unwrap_or(default_port),
         ),
-        None => (String::from(host_port), 80),
+        None => (String::from(host_port), default_port),
     };
     Ok((host, port, path))
 }

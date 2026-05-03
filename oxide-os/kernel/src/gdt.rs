@@ -22,9 +22,11 @@ static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
 
 static GDT: Lazy<(GlobalDescriptorTable, Selectors)> = Lazy::new(|| {
     let mut gdt = GlobalDescriptorTable::new();
-    let code_selector = gdt.append(Descriptor::kernel_code_segment());
-    let data_selector = gdt.append(Descriptor::kernel_data_segment());
-    let tss_selector = gdt.append(Descriptor::tss_segment(&TSS));
+    let code_selector = gdt.append(Descriptor::kernel_code_segment());   // Index 1 → 0x08
+    let data_selector = gdt.append(Descriptor::kernel_data_segment());   // Index 2 → 0x10
+    let _user_data_selector = gdt.append(Descriptor::user_data_segment()); // Index 3 → 0x1B (ring 3)
+    let _user_code_selector = gdt.append(Descriptor::user_code_segment()); // Index 4 → 0x23 (ring 3)
+    let tss_selector = gdt.append(Descriptor::tss_segment(&TSS));        // Index 5-6 (16-byte)
     (gdt, Selectors { code_selector, data_selector, tss_selector })
 });
 

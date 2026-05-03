@@ -4,6 +4,7 @@ pub mod socket;
 pub mod dns;
 pub mod http;
 pub mod firewall;
+pub mod tls;
 
 use crate::println;
 
