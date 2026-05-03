@@ -7,6 +7,7 @@ extern crate alloc;
 
 mod allocator;
 mod apic;
+mod capability;
 mod gdt;
 mod interrupts;
 mod memory;
