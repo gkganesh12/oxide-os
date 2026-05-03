@@ -1,0 +1,4 @@
+/target
+*.iso
+iso_root/
+limine/
