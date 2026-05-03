@@ -4,7 +4,27 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 7: Storage (Next)
+### Phase 8: Crypto & Timers (Next)
+
+---
+
+## [0.7.0] - 2026-05-03
+
+### Phase 7: Storage
+
+**Added:**
+- virtio-blk block device driver skeleton (512 MiB virtual disk)
+- LRU block cache (256 entries, 128 KiB, write-back eviction)
+- OxideFS: log-structured filesystem with content-addressable blob dedup
+- Per-agent context store (key-value, capability-gated read/write)
+- `clear_agent()` for cleanup on agent death
+- File operations: write, read, delete, list by prefix
+
+**Architecture decisions:**
+- In-memory filesystem for MVP (backed by blobs, not disk blocks yet)
+- Content dedup via full-content comparison (hash-based dedup deferred)
+- Context store has in-memory cache + OxideFS persistence
+- Cap validation: CAP_TABLE → STORE → FS lock ordering
 
 ---
 
