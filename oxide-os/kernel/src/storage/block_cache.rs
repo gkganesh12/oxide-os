@@ -50,7 +50,7 @@ impl BlockCache {
     pub fn flush(&mut self) -> Result<usize, &'static str> {
         let dirty: Vec<(u64, [u8; 512])> = self.cache.iter()
             .filter(|(_, b)| b.dirty).map(|(&n, b)| (n, b.data)).collect();
-        let device = DEVICE.lock();
+        let mut device = DEVICE.lock();
         for (num, data) in &dirty { device.write_block(*num, data)?; }
         let count = dirty.len();
         for (num, _) in &dirty {
