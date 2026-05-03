@@ -6,6 +6,31 @@ All notable changes to Oxide OS are documented here.
 
 ---
 
+## [1.1.0] - 2026-05-03
+
+### Real I/O Stack — Making Everything Actually Work
+
+**Added:**
+- PCI bus enumeration (scans all bus/device/function, discovers hardware)
+- Real virtio-net driver (PCI discovery, BAR0, virtqueue RX/TX, feature negotiation, DMA)
+- Real virtio-blk driver (PCI discovery, virtqueue block I/O, 3-descriptor chains)
+- Real HTTP over TCP (socket create → connect → send → receive → parse, with timeouts)
+- Syscall instruction wiring (EFER.SCE, LSTAR, STAR, SFMASK, naked assembly entry)
+- HTTP response parser (status line + body extraction)
+- PCI bus mastering for DMA transfers
+
+**Fixed:**
+- Agent signing `verify()` no longer returns `true` unconditionally — real HMAC comparison
+- HTTP validates capabilities AND calls firewall before connecting
+- smoltcp Device trait wired to real virtio-net virtqueue RX/TX
+
+**What was placeholder → now real:**
+- `virtio-net`: skeleton → real PCI driver with 256-entry split virtqueues
+- `virtio-blk`: stub returning zeros → real PCI driver with virtqueue block I/O
+- `HTTP client`: returning `{}` → real TCP socket flow with timeouts
+- `signing.verify()`: always true → constant-time HMAC comparison
+- `syscall dispatch`: Rust functions only → x86_64 MSRs wired for `syscall` instruction
+
 ## [1.0.0] - 2026-05-03
 
 ### Phase 10: Inference Engine & GPU Scheduler

@@ -1,43 +1,50 @@
 # Technical Debt & Known Issues
 
-## Critical (fix before next phase)
+## Critical
 
-- [ ] **Cooperative preemption only** — tasks must call `should_reschedule()` + `yield_now()` in their loop. A task that never checks (infinite compute, no yield point) cannot be preempted. True preemption requires interrupt-return patching or a dedicated preemption mechanism.
-- [ ] **Timer interval not calibrated** — `0x20000` is arbitrary. Actual frequency depends on bus clock. Should calibrate against a known time source (PIT or TSC) at boot.
+- [ ] **Cooperative preemption only** — tasks must call `should_reschedule()` + `yield_now()`. True preemption requires interrupt-return patching.
+- [ ] **Timer interval not calibrated** — `0x20000` is arbitrary. Should calibrate against PIT or TSC.
 
-## Important (fix soon)
+## Important
 
-- [ ] **No SMP support** — single-core only. APIC IDs, per-CPU scheduler state, and atomic context switch needed for multi-core.
-- [ ] **Frame allocator is O(n) per allocation** — linear bitmap scan. Fine for <32K frames but will be slow with more RAM. Consider buddy allocator.
-- [ ] **No unmap/free for page tables** — `alloc_and_map` allocates but there's no `unmap_and_free`. Dead task stacks remain mapped forever in virtual space.
-- [ ] **Heap cannot grow** — fixed 1 MiB. If exhausted, kernel panics. Should support dynamic heap expansion.
-- [ ] **Shared memory not truly contiguous** — `create_region` allocates frames one-by-one. Physical frames may not be contiguous. Fine for HHDM-mapped access but problematic for DMA.
+- [ ] **No ring-3 user space** — syscall MSRs are set up but no user-mode page tables or ELF loading into separate address space. All code runs in ring-0.
+- [ ] **OxideFS not persisted to disk** — still in-memory only. Need to write superblock + blobs to virtio-blk blocks.
+- [ ] **No SMP support** — single-core only.
+- [ ] **Frame allocator is O(n)** — linear bitmap scan.
+- [ ] **No unmap/free for page tables** — dead task stacks stay mapped.
+- [ ] **Heap cannot grow** — fixed 1 MiB.
+- [ ] **virtio-blk DMA addresses** — using virtual addresses for descriptors, works in QEMU emulation but not on real hardware.
+- [ ] **No TLS** — HTTP only, not HTTPS. Need TLS 1.3 for real API calls.
 
-## Nice to Have (future phases)
+## Nice to Have
 
-- [ ] Time-slice accounting (RT tasks get more ticks per quantum)
-- [ ] Priority inheritance (prevent priority inversion)
-- [ ] Per-task CPU time tracking (for resource accounting)
-- [ ] Kernel profiling (where time is spent)
-- [ ] Serial input (not just output) for interactive debugging
-- [ ] Structured kernel logging with log levels (debug/info/warn/error)
-- [ ] Suppress dead-code warnings for public API modules (allow(dead_code) on ipc/capability mods)
+- [ ] Time-slice accounting
+- [ ] Priority inheritance
+- [ ] Serial input for interactive debugging
+- [ ] Structured kernel logging with levels
+- [ ] DHCP (currently static IP)
+- [ ] ARP resolution (currently relies on QEMU user-mode networking)
 
 ## Resolved
 
-- [x] ~~Stack memory leak on task kill~~ — Fixed: stack_frames stored in Task, freed via cleanup_dead_task()
-- [x] ~~No task ID recycling~~ — Fixed: freelist-based IdAllocator
-- [x] ~~Non-contiguous stack allocation~~ — Fixed: virtual mapping with guard page
-- [x] ~~Interrupt frame leak~~ — Fixed: deferred switch model
-- [x] ~~Deadlock in panic handler~~ — Fixed: panic_println bypasses lock
-- [x] ~~static mut in GDT~~ — Fixed: safe static Stack wrapper
-- [x] ~~static mut in APIC~~ — Fixed: AtomicU64
-- [x] ~~Kernel memory not protected~~ — Fixed: mark kernel/bootloader regions used
-- [x] ~~No OOM handler~~ — Fixed: alloc_error_handler
-- [x] ~~Task monopolization~~ — Fixed: fair pick_next_fair
-- [x] ~~Interrupts disabled on fresh tasks~~ — Fixed: entry trampoline
-- [x] ~~IPC untested~~ — Fixed: integration test (sender→receiver, 18+ messages verified)
-- [x] ~~Mailbox not cleaned on death~~ — Fixed: unregister_mailbox in cleanup_dead_task
-- [x] ~~check_timeouts deadlock from ISR~~ — Fixed: try_lock in check_timeouts
-- [x] ~~PermissionBits::Display heap allocates~~ — Fixed: zero-alloc formatter
-- [x] ~~Memory is_subset_of overflow~~ — Fixed: saturating_add
+- [x] ~~virtio-net skeleton~~ — Fixed: real PCI driver with split virtqueues (v1.1.0)
+- [x] ~~virtio-blk stub~~ — Fixed: real PCI driver with virtqueue block I/O (v1.1.0)
+- [x] ~~HTTP returns placeholder~~ — Fixed: real TCP socket flow with timeouts (v1.1.0)
+- [x] ~~signing.verify() always true~~ — Fixed: real HMAC constant-time comparison (v1.1.0)
+- [x] ~~Syscalls not wired~~ — Fixed: EFER.SCE + LSTAR + STAR + SFMASK + naked entry (v1.1.0)
+- [x] ~~Stack memory leak on task kill~~ — Fixed: cleanup_dead_task (v0.5.0)
+- [x] ~~No task ID recycling~~ — Fixed: freelist IdAllocator (v0.5.0)
+- [x] ~~Non-contiguous stack allocation~~ — Fixed: virtual mapping (v0.2.0)
+- [x] ~~Interrupt frame leak~~ — Fixed: deferred switch (v0.2.0)
+- [x] ~~Deadlock in panic handler~~ — Fixed: panic_println (v0.1.0)
+- [x] ~~static mut in GDT/APIC~~ — Fixed: safe wrappers (v0.2.0)
+- [x] ~~Kernel memory not protected~~ — Fixed: mark regions used (v0.1.0)
+- [x] ~~Task monopolization~~ — Fixed: fair pick_next_fair (v0.2.0)
+- [x] ~~IPC untested~~ — Fixed: integration test (v0.5.0)
+- [x] ~~check_timeouts deadlock~~ — Fixed: try_lock (v0.4.0)
+- [x] ~~PermissionBits::Display heap alloc~~ — Fixed: zero-alloc formatter (v0.3.0)
+- [x] ~~O(n*m) dedup~~ — Fixed: FNV-1a hash (v0.7.0)
+- [x] ~~Lock ordering undocumented~~ — Fixed: comments added (v0.7.0)
+- [x] ~~Socket lock ordering deadlock~~ — Fixed: INTERFACE→SOCKETS (v0.6.0)
+- [x] ~~128 KiB per socket~~ — Fixed: 8 KiB buffers (v0.6.0)
+- [x] ~~HTTP ignoring capabilities~~ — Fixed: validate + firewall (v0.6.0)
