@@ -13,6 +13,7 @@ mod gdt;
 mod interrupts;
 mod ipc;
 mod memory;
+mod net;
 mod qemu;
 mod serial;
 mod task;
@@ -87,6 +88,8 @@ extern "C" fn _start() -> ! {
     println!("[boot] Page tables ready");
 
     allocator::init(&mut mapper);
+
+    net::init(hhdm_offset);
 
     // Initialize APIC and timer
     apic::disable_pic();
