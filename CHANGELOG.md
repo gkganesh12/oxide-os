@@ -6,6 +6,22 @@ All notable changes to Oxide OS are documented here.
 
 ---
 
+## [1.2.0] - 2026-05-03
+
+### Production Hardening
+
+**Added:**
+- OxideFS disk persistence: `sync_to_disk()` / `load_from_disk()` with superblock + blob + index serialization
+- Ring-3 user-mode foundation: `enter_usermode()` via iretq, user code/data GDT segments
+- TLS 1.3 stub: interface for HTTPS, availability check, https:// URL detection in HTTP client
+- User-mode GDT entries (user code at ring 3, user data at ring 3)
+- OxideFS auto-loads from disk on init (graceful fallback to fresh if no FS found)
+
+**Architecture decisions:**
+- OxideFS disk format: block 0 superblock (magic+counts), blocks 1..N blobs (id+size+data), blocks N+1..M index entries
+- Ring-3 uses iretq for privilege transition (standard x86_64 mechanism)
+- TLS is a stub — real implementation requires rustls crate integration
+
 ## [1.1.0] - 2026-05-03
 
 ### Real I/O Stack — Making Everything Actually Work
