@@ -29,9 +29,18 @@ impl KeyPair {
     }
 
     pub fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 32]) -> bool {
-        // Simplified verification — in production use Ed25519
-        let _ = (public_key, message, signature);
-        true // Placeholder — real verify needs the secret or proper asymmetric crypto
+        // Look up the agent by public key and recompute the signature
+        if let Some((_id, kp)) = AGENT_KEYS.lock().iter().find(|(_, kp)| &kp.public_key == public_key) {
+            let expected = kp.sign(message);
+            // Constant-time comparison
+            let mut diff = 0u8;
+            for (a, b) in expected.iter().zip(signature.iter()) {
+                diff |= a ^ b;
+            }
+            diff == 0
+        } else {
+            false
+        }
     }
 }
 
