@@ -1,7 +1,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use crate::task::TaskId;
-use crate::capability::CapId;
+use crate::capability::{CapId, CAP_TABLE, PermissionBits};
+use super::firewall;
 
 #[derive(Debug)]
 pub struct HttpResponse {
@@ -17,18 +18,48 @@ pub enum HttpError {
     ReceiveFailed,
     ParseError,
     CapabilityDenied,
+    FirewallDenied,
 }
 
-pub fn get(url: &str, task_id: TaskId, _net_cap: CapId) -> Result<HttpResponse, HttpError> {
+pub fn get(url: &str, task_id: TaskId, net_cap: CapId) -> Result<HttpResponse, HttpError> {
     let (host, port, path) = parse_url(url)?;
-    // For now: log the request. Real implementation connects via socket API.
+
+    // Validate capability
+    {
+        let table = CAP_TABLE.lock();
+        table.validate(net_cap, task_id, PermissionBits::CONNECT)
+            .map_err(|_| HttpError::CapabilityDenied)?;
+    }
+
+    // Check firewall
+    let decision = firewall::check_outbound(task_id, net_cap, &host, port);
+    firewall::log_decision(task_id, &alloc::format!("{}:{}", host, port), &decision);
+    if let firewall::FirewallDecision::Deny(_) = decision {
+        return Err(HttpError::FirewallDenied);
+    }
+
     crate::println!("[http] GET {}:{}{} (task {})", host, port, path, task_id);
-    // Return a placeholder — real networking requires virtio-net packet handling
+    // Placeholder — real networking requires virtio-net packet handling
     Ok(HttpResponse { status_code: 200, body: b"{}".to_vec() })
 }
 
-pub fn post(url: &str, body: &[u8], task_id: TaskId, _net_cap: CapId) -> Result<HttpResponse, HttpError> {
+pub fn post(url: &str, body: &[u8], task_id: TaskId, net_cap: CapId) -> Result<HttpResponse, HttpError> {
     let (host, port, path) = parse_url(url)?;
+
+    // Validate capability
+    {
+        let table = CAP_TABLE.lock();
+        table.validate(net_cap, task_id, PermissionBits::CONNECT)
+            .map_err(|_| HttpError::CapabilityDenied)?;
+    }
+
+    // Check firewall
+    let decision = firewall::check_outbound(task_id, net_cap, &host, port);
+    firewall::log_decision(task_id, &alloc::format!("{}:{}", host, port), &decision);
+    if let firewall::FirewallDecision::Deny(_) = decision {
+        return Err(HttpError::FirewallDenied);
+    }
+
     crate::println!("[http] POST {}:{}{} ({} bytes, task {})", host, port, path, body.len(), task_id);
     Ok(HttpResponse { status_code: 200, body: b"{}".to_vec() })
 }

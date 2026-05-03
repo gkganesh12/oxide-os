@@ -15,7 +15,7 @@ impl DnsResolver {
         DnsResolver { cache }
     }
 
-    pub fn resolve(&mut self, hostname: &str) -> Option<Ipv4Address> {
+    pub fn resolve(&self, hostname: &str) -> Option<Ipv4Address> {
         self.cache.get(hostname).copied()
     }
 

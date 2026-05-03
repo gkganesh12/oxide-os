@@ -19,8 +19,9 @@ pub enum SocketError {
 }
 
 pub fn tcp_create() -> Option<SocketHandle> {
-    let rx_buffer = SocketBuffer::new(vec![0; 65535]);
-    let tx_buffer = SocketBuffer::new(vec![0; 65535]);
+    // 4 KiB buffers — production-safe for kernel heap (vs 128 KiB before)
+    let rx_buffer = SocketBuffer::new(vec![0; 4096]);
+    let tx_buffer = SocketBuffer::new(vec![0; 4096]);
     let socket = TcpSocket::new(rx_buffer, tx_buffer);
     let mut sockets = SOCKETS.lock();
     sockets.as_mut().map(|set| set.add(socket))
@@ -38,12 +39,15 @@ pub fn tcp_connect(
         table.validate(net_cap, task_id, PermissionBits::CONNECT)
             .map_err(|_| SocketError::CapabilityDenied)?;
     }
-    let mut sockets = SOCKETS.lock();
+    // Lock order: INTERFACE first, then SOCKETS (matches poll() order — prevents deadlock)
     let mut iface = INTERFACE.lock();
-    if let (Some(sockets), Some(iface)) = (sockets.as_mut(), iface.as_mut()) {
+    let mut sockets = SOCKETS.lock();
+    if let (Some(iface), Some(sockets)) = (iface.as_mut(), sockets.as_mut()) {
         let socket = sockets.get_mut::<TcpSocket>(handle);
         let remote = IpEndpoint::new(remote_addr.into(), remote_port);
-        let local_port = NEXT_LOCAL_PORT.fetch_add(1, Ordering::Relaxed);
+        // Ephemeral port range: 49152-65535. Wrap around safely.
+        let raw = NEXT_LOCAL_PORT.fetch_add(1, Ordering::Relaxed);
+        let local_port = 49152 + (raw % (65535 - 49152 + 1));
         socket.connect(iface.context(), remote, local_port)
             .map_err(|_| SocketError::ConnectionFailed)?;
         Ok(())

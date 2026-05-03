@@ -43,8 +43,15 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     // Signal that a reschedule is needed — actual switch happens outside ISR
     crate::task::scheduler::timer_tick();
 
+    let tick = TIMER_TICKS.load(Ordering::Relaxed);
+
+    // Poll network stack every 10 ticks
+    if tick % 10 == 0 {
+        crate::net::stack::poll();
+    }
+
     // Check for IPC request timeouts every 50 ticks
-    if TIMER_TICKS.load(Ordering::Relaxed) % 50 == 0 {
+    if tick % 50 == 0 {
         crate::ipc::request_reply::check_timeouts();
     }
 }
