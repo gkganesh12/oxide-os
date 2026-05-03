@@ -4,7 +4,29 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 6: Networking (Next)
+### Phase 7: Storage (Next)
+
+---
+
+## [0.6.0] - 2026-05-03
+
+### Phase 6: Networking
+
+**Added:**
+- virtio-net driver skeleton (MAC, receive/transmit interface)
+- smoltcp v0.12 TCP/IP stack integration (Ethernet, IPv4, TCP, UDP)
+- Network interface: 10.0.2.15/24 with gateway 10.0.2.2 (QEMU user-mode)
+- Socket API: tcp_create, tcp_connect (cap-gated), tcp_send, tcp_receive, tcp_close
+- Cache-based DNS resolver with static entries
+- HTTP client (GET/POST) with URL parsing
+- Capability-gated firewall (checks host/port against Network capabilities)
+- Network stack polling function for timer-driven I/O
+
+**Architecture decisions:**
+- smoltcp Device trait wraps virtio-net (swappable backend)
+- HTTP returns placeholder responses until real virtio packet handling is implemented
+- Firewall validates at connect time, not per-packet (performance)
+- Ephemeral port allocation via atomic counter
 
 ---
 
