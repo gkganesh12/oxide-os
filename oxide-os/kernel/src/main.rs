@@ -2,6 +2,9 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
+mod allocator;
 mod gdt;
 mod interrupts;
 mod memory;
@@ -86,8 +89,10 @@ extern "C" fn _start() -> ! {
         panic!("Memory map not available");
     }
 
-    let _mapper = unsafe { memory::paging::init(hhdm_offset) };
+    let mut mapper = unsafe { memory::paging::init(hhdm_offset) };
     println!("[boot] Page tables initialized.");
+
+    allocator::init(&mut mapper);
 
     println!("[boot] Kernel halted.");
     hcf();
