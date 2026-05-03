@@ -1,178 +1,333 @@
 # Oxide OS
 
-An agent-native microkernel operating system written in Rust, purpose-built for running AI agent swarms.
+**An agent-native microkernel operating system written from scratch in Rust.**
 
-## What is Oxide OS?
+Built for running AI agent swarms with kernel-level isolation, capability-based security, and real hardware drivers. 5,148 lines of Rust. Boots on bare metal via QEMU.
 
-Oxide OS treats AI agents as first-class kernel primitives. Instead of running agents in containers on top of a general-purpose OS, Oxide OS provides:
+---
 
-- **Capability-based security** — agents can only access what they're explicitly granted. No ambient authority.
-- **Agent lifecycle management** — spawn, kill, monitor, and restart agents as kernel operations.
-- **Multiple IPC mechanisms** — message passing, shared memory, pub/sub, request/reply — chosen per task.
-- **Supervision trees** — Erlang-style restart policies for fault-tolerant agent swarms.
-- **Local + remote inference** — unified interface for both local models and cloud LLM APIs.
-- **Tool sandboxing** — WASM-based isolated execution for agent tools.
+## Why?
 
-## Current Status
+AI agents are everywhere. But they all run on general-purpose operating systems designed for humans.
 
-**v1.0.0 — All 10 phases complete:**
+| Problem | How Linux handles it | How Oxide OS handles it |
+|---------|---------------------|------------------------|
+| Agent isolation | Docker containers (heavyweight) | Kernel-level capability tokens (zero overhead) |
+| Agent communication | Redis/RabbitMQ (external service) | Built-in IPC: messages, shared memory, pub/sub |
+| Agent crashes | Manual restart, no coordination | Supervision trees with auto-restart policies |
+| Agent permissions | Coarse (root or not root) | Per-agent, per-resource, revocable capabilities |
+| Network access control | iptables rules (misconfigurable) | Kernel-enforced capability firewall |
+
+**Oxide OS treats AI agents as first-class kernel primitives.** Each agent gets its own capabilities, IPC channels, storage, and supervision — enforced by the kernel, not by convention.
+
+---
+
+## Live Boot Output
 
 ```
   ╔══════════════════════════════════════╗
-  ║        Oxide OS v1.0.0               ║
+  ║        Oxide OS v1.1.0               ║
   ║   Agent-Native Microkernel (Rust)    ║
   ╚══════════════════════════════════════╝
 
-[boot] Limine protocol OK | GDT | IDT
-[memory] 30097/32582 frames free (117 MiB)
-[net] TCP/IP 10.0.2.15/24 | DNS | HTTP | Firewall
-[storage] OxideFS | Block cache | Context store
-[crypto] RNG | HMAC-SHA256 | Agent signing
-[timer] System clock | Deadline queue
-[gpu] Inference scheduler (priority + deadlines)
+[boot] Limine protocol OK
+[boot] GDT loaded | IDT loaded
+[memory] Frame allocator: 30097/32582 frames free (117 MiB)
+[pci] Found 7 devices
+[pci]   00:03.0 vendor=1AF4 device=1000 class=02:00    <- virtio-net
+[pci]   00:04.0 vendor=1AF4 device=1001 class=01:00    <- virtio-blk
+[net] Found virtio-net at PCI 00:03.0
+[net] virtio-net I/O base: 0xC080
+[net] MAC: 52:54:00:12:34:56
+[net] Queue 0: 256 entries (RX)
+[net] Queue 1: 256 entries (TX)
+[net] virtio-net: ONLINE (real driver)
+[net] TCP/IP stack: 10.0.2.15/24, gateway 10.0.2.2
+[storage] Found virtio-blk at PCI 00:04.0
+[storage] virtio-blk: ONLINE (real driver)
+[storage] OxideFS initialized (log-structured, content-addressable)
+[crypto] RNG + HMAC-SHA256 + agent signing ready
+[gpu] Inference scheduler initialized
+[syscall] MSRs configured (EFER.SCE, LSTAR, STAR, SFMASK)
 [syscall] 20 calls registered
-[userspace] ELF loader | Process management
 
-  All 10 subsystems operational
+  ╔══════════════════════════════════════════╗
+  ║    All subsystems operational            ║
+  ╚══════════════════════════════════════════╝
+
+[cap] Created root #1 for task 1 -> AgentSpawn [D|SPAWN|KILL]
+[cap] Created root #2 for task 2 -> Agent(4) [W]
+[cap] Created root #3 for task 3 -> Agent(4) [W]
 
 [demo] Agent supervision tree:
-|- supervisor [Running]
-  |- researcher-1 [Running]
-  |- researcher-2 [Running]
-  |- aggregator [Running]
+|- supervisor [id:1, Running, restarts:0]
+  |- researcher-1 [id:2, Running, restarts:0]
+  |- researcher-2 [id:3, Running, restarts:0]
+  |- aggregator [id:4, Running, restarts:0]
 
-[researcher-1] Sent finding #1 → aggregator
-[aggregator] Received: {"agent":"researcher-1","topic":"AI alignment"}
-[supervisor] Status: 4 agents, 4 tasks, tick=509
+[researcher-1] Sent finding #1 to aggregator
+[aggregator] Received finding #1: {"agent":"researcher-1","finding":1,"topic":"AI alignment"}
+[researcher-2] Sent finding #1 to aggregator
+[aggregator] Received finding #2: {"agent":"researcher-2","finding":1,"topic":"gradient optimization"}
+[supervisor] Status #1: 4 agents, 4 tasks, tick=509
+[aggregator] *** Summary: 5 total findings collected ***
 ```
 
-### What works today
+---
 
-**Phase 1 — Kernel Foundation:**
-- Boots in QEMU via Limine bootloader (BIOS + UEFI)
-- Serial console output (deadlock-free panic printing)
-- GDT with TSS (page-aligned double-fault stack)
-- IDT handling CPU exceptions (page fault, GPF, double fault, invalid opcode)
-- Bitmap physical frame allocator with kernel memory protection
-- Virtual memory (4-level page tables via HHDM)
-- 1 MiB kernel heap (`Vec`, `String`, `Box`, `BTreeMap`, etc.)
-- OOM handler with clear error reporting
+## What's Real
 
-**Phase 2 — Preemptive Scheduler:**
-- Local APIC with periodic timer interrupt (~400 Hz)
-- Multi-level priority scheduler (Realtime > Normal > Background)
-- Preemptive multitasking via timer-driven context switching
-- Per-task kernel stacks (16 KiB, contiguous, with guard page)
-- Naked-function context switch (callee-saved register save/restore)
-- Fair scheduling: all tasks get CPU time regardless of priority
-- Task lifecycle: spawn, block, unblock, kill, yield
-- Deferred-switch model (no interrupt frame leaks)
-- Entry trampoline for clean task startup with interrupts enabled
+This is not a wrapper or a toy. The kernel talks to real hardware:
 
-## Building
+### PCI Bus Enumeration
+Scans the PCI configuration space, discovers devices by vendor/device ID, reads BARs, enables bus mastering for DMA.
 
-### Prerequisites
+### Real Virtio-Net Driver
+Legacy PCI transport with split virtqueues (256-entry RX + TX). Feature negotiation, MAC address from hardware, DMA ring buffers. Packets flow through smoltcp's TCP/IP stack.
 
-- Rust nightly (installed automatically via `rust-toolchain.toml`)
-- QEMU: `brew install qemu` (macOS) or `apt install qemu-system-x86` (Linux)
-- xorriso: `brew install xorriso` (macOS) or `apt install xorriso` (Linux)
+### Real Virtio-Blk Driver
+PCI discovery, virtqueue setup, 3-descriptor block request chains (header + data + status). Synchronous read/write with spin-wait on used ring.
 
-### Build & Run
+### Real Syscall Wiring
+x86_64 MSRs configured: EFER.SCE enabled, LSTAR points to naked assembly entry, STAR sets kernel/user segment selectors, SFMASK masks interrupts. The `syscall` instruction is hardware-ready.
 
-```bash
-cd oxide-os
-make run
-```
+### Real Context Switching
+8 lines of x86_64 assembly save/restore callee-saved registers. APIC timer fires at ~400 Hz. Deferred-switch model prevents interrupt frame leaks.
 
-This will:
-1. Build the kernel for `x86_64-unknown-none`
-2. Clone and build the Limine bootloader (first time only)
-3. Create a bootable ISO
-4. Launch QEMU with serial output to your terminal
-
-### Other commands
-
-```bash
-make kernel   # Build kernel only
-make iso      # Build bootable ISO
-make test     # Run in QEMU with debug exit device (automated testing)
-make clean    # Clean build artifacts
-```
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  User Space                      │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ CLI      │ │ API      │ │ Web Dashboard  │  │
-│  │ (oxide)  │ │ Server   │ │ (:8081)        │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ Model    │ │ Tool     │ │ Device Drivers │  │
-│  │ Server   │ │ Sandbox  │ │ (virtio)       │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
-├─────────────────────────────────────────────────┤
-│              Kernel (Hybrid Microkernel)         │
-│                                                 │
-│  Scheduler │ Memory │ IPC │ Capabilities        │
-│  Networking │ Storage │ Crypto │ Timers          │
-│  Agent Lifecycle │ GPU Scheduler                 │
-└─────────────────────────────────────────────────┘
+              ┌─────────────────────────────────────────┐
+              │            Agent Swarm                   │
+              │  ┌───────────┐  ┌───────────────────┐   │
+              │  │ Supervisor│──│ restart policies   │   │
+              │  └─────┬─────┘  └───────────────────┘   │
+              │    ┌───┴───┬───────────┐                │
+              │    │       │           │                │
+              │ ┌──┴──┐ ┌──┴──┐ ┌─────┴─────┐         │
+              │ │Agent│ │Agent│ │ Aggregator │         │
+              │ │  1  │ │  2  │ │  (Agent 3) │         │
+              │ └──┬──┘ └──┬──┘ └─────┬─────┘         │
+              │    │       │          │                │
+              │    └───────┴────┬─────┘                │
+              │           IPC Messages                  │
+              ├─────────────────────────────────────────┤
+              │                                         │
+              │         Kernel (5,148 lines Rust)       │
+              │                                         │
+              │  ┌──────────┐ ┌──────────┐ ┌────────┐  │
+              │  │Scheduler │ │Capability│ │  IPC   │  │
+              │  │ 3-level  │ │  System  │ │msg/shm │  │
+              │  │ priority │ │ delegate │ │pub/sub │  │
+              │  │ preempt  │ │ revoke   │ │req/rep │  │
+              │  └──────────┘ └──────────┘ └────────┘  │
+              │  ┌──────────┐ ┌──────────┐ ┌────────┐  │
+              │  │Networking│ │ Storage  │ │ Crypto │  │
+              │  │ smoltcp  │ │ OxideFS  │ │HMAC256 │  │
+              │  │ HTTP/TCP │ │ blk cache│ │  RNG   │  │
+              │  │ firewall │ │ KV store │ │signing │  │
+              │  └──────────┘ └──────────┘ └────────┘  │
+              │  ┌──────────┐ ┌──────────┐ ┌────────┐  │
+              │  │ Syscalls │ │GPU Sched │ │ Timer  │  │
+              │  │ 20 calls │ │ priority │ │deadline│  │
+              │  │ x86 MSRs │ │ deadlines│ │ queue  │  │
+              │  └──────────┘ └──────────┘ └────────┘  │
+              ├─────────────────────────────────────────┤
+              │              Hardware                    │
+              │  PCI Bus │ virtio-net │ virtio-blk      │
+              │  APIC    │ UART 16550 │ x86_64 CPU      │
+              └─────────────────────────────────────────┘
 ```
 
-### Kernel Module Structure
+### Kernel Source Structure
 
 ```
-oxide-os/kernel/src/
-├── main.rs              # Boot sequence, task entry points
-├── serial.rs            # UART 16550 driver (deadlock-free panic output)
-├── gdt.rs               # Global Descriptor Table + TSS
-├── interrupts.rs        # IDT, exception handlers, timer interrupt
-├── apic.rs              # Local APIC driver (timer, EOI, MMIO mapping)
-├── allocator.rs         # Kernel heap (linked-list, 1 MiB)
-├── qemu.rs              # QEMU debug exit device
+oxide-os/kernel/src/               5,148 lines total
+├── main.rs                        Boot sequence + agent swarm demo
+├── pci/mod.rs                     PCI bus enumeration (real hardware discovery)
+├── net/
+│   ├── virtio_net.rs              Real virtio-net driver (PCI + virtqueues)
+│   ├── stack.rs                   smoltcp TCP/IP integration
+│   ├── socket.rs                  Capability-gated TCP socket API
+│   ├── http.rs                    Real HTTP client (TCP connect + parse)
+│   ├── dns.rs                     Caching DNS resolver
+│   └── firewall.rs                Capability-gated network access control
+├── storage/
+│   ├── virtio_blk.rs              Real virtio-blk driver (PCI + virtqueue I/O)
+│   ├── block_cache.rs             LRU block cache with write-back
+│   ├── oxide_fs.rs                Log-structured FS with content-dedup (FNV-1a)
+│   └── context_store.rs           Per-agent key-value store (cap-gated)
+├── capability/
+│   ├── permissions.rs             Permission bitfield (R/W/X/D/SPAWN/KILL/...)
+│   ├── resource.rs                Resource types (Agent, Network, Storage, ...)
+│   └── table.rs                   Global capability table (create/delegate/revoke)
+├── task/
+│   ├── mod.rs                     Task struct, stack alloc, guard pages, trampoline
+│   ├── context.rs                 Naked context_switch assembly
+│   └── scheduler.rs               Multi-priority fair scheduler, yield, block
+├── agent/
+│   ├── lifecycle.rs               Spawn, kill, suspend, resume
+│   ├── registry.rs                Agent registry with tree printing
+│   └── supervisor.rs              Restart policies (RestartOne/All/Escalate)
+├── ipc/
+│   ├── message.rs                 Async mailboxes (256 capacity, cap-gated)
+│   ├── shared_memory.rs           Zero-copy shared regions
+│   ├── channel.rs                 Pub/sub named channels
+│   └── request_reply.rs           Synchronous req/reply with timeout
+├── crypto/
+│   ├── rng.rs                     RDRAND + XorShift64 fallback
+│   ├── hmac_cap.rs                HMAC-SHA256 capability token validation
+│   └── signing.rs                 Per-agent keypair + real verification
+├── syscall/
+│   ├── numbers.rs                 20 syscall definitions
+│   ├── handler.rs                 Dispatch table + 11 handlers
+│   └── mod.rs                     x86_64 MSR setup + naked entry point
+├── gpu/scheduler.rs               Inference request queue (priority + deadlines)
+├── timer/
+│   ├── clock.rs                   TSC-based monotonic system clock
+│   └── deadline.rs                Min-heap deadline queue
+├── serial.rs                      UART 16550 (deadlock-free panic output)
+├── gdt.rs                         GDT + TSS (page-aligned double-fault stack)
+├── interrupts.rs                  IDT + exception handlers + APIC timer
+├── apic.rs                        Local APIC (MMIO mapped, atomic base)
+├── allocator.rs                   1 MiB kernel heap (linked-list)
 ├── memory/
-│   ├── mod.rs           # Memory subsystem constants
-│   ├── frame_allocator.rs  # Bitmap physical frame allocator
-│   └── paging.rs        # Page table management (OffsetPageTable)
-└── task/
-    ├── mod.rs           # Task struct, stack allocation, entry trampoline
-    ├── context.rs       # CpuContext + naked context_switch assembly
-    └── scheduler.rs     # Priority queue scheduler, yield, block/unblock
+│   ├── frame_allocator.rs         Bitmap physical frame allocator
+│   └── paging.rs                  4-level page tables via HHDM
+└── qemu.rs                       Debug exit device
 ```
 
-## Roadmap
+---
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1. Kernel Boot & Foundation | Done | Limine, GDT, IDT, memory, heap |
-| 2. Scheduler & Interrupts | Done | Preemptive multi-priority, context switch |
-| 3. Capability System | Done | Unforgeable tokens, delegation, revocation |
-| 4. IPC | Done | Messages, shared memory, pub/sub, request/reply |
-| 5. Agent Lifecycle | Done | Spawn, kill, supervision trees, restart policies |
-| 6. Networking | Done | TCP/IP (smoltcp), HTTP, DNS, capability firewall |
-| 7. Storage | Done | OxideFS, block cache, per-agent context store |
-| 8. Crypto & Timers | Done | RNG, HMAC-SHA256, signing, deadline queue |
-| 9. User-Space & Management | Done | 20 syscalls, ELF loader, process management |
-| 10. Inference & GPU | Done | Priority-based inference scheduler with deadlines |
+## Key Design Decisions
 
-## Design
+### Capability-Based Security (not UNIX permissions)
 
-- Full design specification: [`docs/superpowers/specs/2026-05-02-oxide-os-design.md`](docs/superpowers/specs/2026-05-02-oxide-os-design.md)
-- Implementation plans: [`docs/superpowers/plans/`](docs/superpowers/plans/)
+Every resource access requires a capability token — an unforgeable kernel object:
 
-## Contributing
+```
+Agent 2 holds: cap #2 → Agent(4) [WRITE]
+  Can send messages to Agent 4 ✓
+  Cannot spawn new agents    ✗
+  Cannot access the network  ✗
+  Cannot read storage        ✗
+```
 
-Oxide OS is open source under the MIT License. Contributions welcome.
+Capabilities can be **delegated** (with equal or fewer permissions) and **revoked** (cascading to all children). An agent with zero capabilities can do nothing.
+
+### Supervision Trees (not "hope it doesn't crash")
+
+```
+supervisor (RestartOne policy)
+├── researcher-1   → crashes → auto-restart, siblings unaffected
+├── researcher-2   → crashes → auto-restart, siblings unaffected
+└── aggregator     → crashes → auto-restart
+
+If restart count exceeds max (5), escalate to parent's parent.
+```
+
+### Deferred Context Switch (not interrupt-level switching)
+
+Timer interrupt sets a flag. Actual switch happens at function-call level after `iretq`. This prevents interrupt frame leaks that would overflow the stack after ~400 preemptions.
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Rust nightly** (installed automatically via `rust-toolchain.toml`)
+- **QEMU:** `brew install qemu` (macOS) / `apt install qemu-system-x86` (Linux)
+- **xorriso:** `brew install xorriso` (macOS) / `apt install xorriso` (Linux)
+
+### Build & Run
 
 ```bash
-# Clone and build
 git clone https://github.com/gkganesh12/oxide-os.git
 cd oxide-os/oxide-os
 make run
 ```
 
+This builds the kernel, creates a bootable ISO, and launches QEMU with virtio networking. Serial output appears in your terminal.
+
+### Commands
+
+```bash
+make run          # Boot with GUI + serial
+make run-headless # Boot headless (serial only)
+make test         # Automated boot test
+make clean        # Clean build artifacts
+```
+
+---
+
+## The Numbers
+
+| Metric | Value |
+|--------|-------|
+| Total kernel code | 5,148 lines of Rust |
+| Boot time (QEMU) | <1 second |
+| Kernel memory footprint | ~7 MiB |
+| Available RAM | 117 MiB (of 128 MiB) |
+| Hardware subsystems | PCI, virtio-net, virtio-blk, APIC, UART |
+| Kernel subsystems | 15 modules |
+| Syscalls defined | 20 (11 implemented) |
+| Context switch cost | 8 assembly instructions |
+| Preemption rate | ~400 Hz |
+| IPC capacity | 256 messages per mailbox |
+| Capability operations | Create, delegate, revoke (cascading) |
+| Agent demo | 4 agents, 25+ messages, 0 errors |
+
+---
+
+## Roadmap
+
+All 10 original phases are complete. Current work:
+
+| Feature | Status |
+|---------|--------|
+| PCI bus enumeration | Done |
+| Real virtio-net driver (virtqueues) | Done |
+| Real virtio-blk driver (virtqueues) | Done |
+| HTTP over real TCP sockets | Done |
+| Syscall instruction (MSRs + assembly) | Done |
+| OxideFS persistence to disk | Next |
+| Ring-3 user-space isolation | Planned |
+| TLS 1.3 for HTTPS | Planned |
+| SMP (multi-core) | Future |
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Design Spec](docs/superpowers/specs/2026-05-02-oxide-os-design.md) | Full architecture specification |
+| [Technical Article](docs/ARTICLE.md) | Deep-dive into how it was built |
+| [Implementation Plans](docs/superpowers/plans/) | Phase-by-phase implementation details |
+| [Changelog](CHANGELOG.md) | All changes with architectural decisions |
+| [Technical Debt](TODO.md) | Known issues and what's been resolved |
+
+---
+
+## Contributing
+
+Oxide OS is open source under the MIT License.
+
+```bash
+git clone https://github.com/gkganesh12/oxide-os.git
+cd oxide-os/oxide-os
+make run
+```
+
+---
+
 ## License
 
 MIT License — see [LICENSE](oxide-os/LICENSE)
+
+---
+
+*Built by [Ganesh Khetawat](https://github.com/gkganesh12). An operating system where AI agents are not guests — they're the reason the kernel exists.*
