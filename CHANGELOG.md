@@ -4,7 +4,31 @@ All notable changes to Oxide OS are documented here.
 
 ## [Unreleased]
 
-### Phase 5: Agent Lifecycle (Next)
+### Phase 6: Networking (Next)
+
+---
+
+## [0.5.0] - 2026-05-03
+
+### Phase 5: Agent Lifecycle
+
+**Added:**
+- `Agent` struct wrapping Tasks with rich metadata (config, model binding, tools, caps)
+- `AgentRegistry` with BTreeMap storage and name-based lookup
+- `spawn()` — creates task, registers mailbox, registers agent, adds to parent's children
+- `kill()` — recursive child kill, unregister, notify parent for supervision
+- `suspend()` / `resume()` for pausing agents
+- Supervision trees: parent-child relationships with restart policies
+- RestartOne, RestartAll, Escalate, Permanent policies
+- Max restart counter with escalation (prevents infinite restart loops)
+- `print_tree()` for debugging agent hierarchy
+- `AgentConfig` with system_prompt, model, tools, capabilities, resource limits
+
+**Architecture decisions:**
+- AgentId = TaskId (same ID space, agent wraps task)
+- Registry separate from scheduler (clean separation of concerns)
+- Supervision logic in dedicated module (supervisor.rs)
+- Kill cascades to children before notifying parent
 
 ---
 
