@@ -116,8 +116,10 @@ impl Scheduler {
                     self.blocked.push(current);
                 }
                 TaskState::Dead => {
-                    println!("[sched] Task {} cleaned up", old_id);
-                    // Task dropped — TODO: return stack frames to allocator
+                    println!("[sched] Task {} '{}' cleaned up (freed {} frames)",
+                        current.id, current.name, current.stack_frames.len());
+                    super::cleanup_dead_task(&current);
+                    // Task is dropped here, freeing heap allocations (name, capabilities vec)
                 }
                 TaskState::Ready => {
                     let pri = current.priority as usize;

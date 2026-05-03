@@ -15,6 +15,7 @@ use context::CpuContext;
 use x86_64::structures::paging::{Page, PageTableFlags, OffsetPageTable, Size4KiB};
 use x86_64::VirtAddr;
 use crate::capability::CapId;
+use crate::memory::frame_allocator::FRAME_ALLOCATOR;
 use crate::memory::paging;
 use crate::memory::PAGE_SIZE;
 
@@ -50,10 +51,62 @@ pub struct Task {
     pub priority: Priority,
     pub context: CpuContext,
     pub stack_top: u64,
+    /// Physical frame addresses used for this task's stack (for freeing on death).
+    pub stack_frames: Vec<u64>,
     pub capabilities: Vec<CapId>,
 }
 
-static NEXT_ID: spin::Mutex<u64> = spin::Mutex::new(1);
+/// Free a dead task's resources (stack frames, mailbox, task ID).
+/// Called by the scheduler when cleaning up a Dead task.
+pub fn cleanup_dead_task(task: &Task) {
+    use x86_64::structures::paging::PhysFrame;
+    use x86_64::PhysAddr;
+
+    // Return stack frames to allocator
+    {
+        let mut alloc = FRAME_ALLOCATOR.lock();
+        if let Some(alloc) = alloc.as_mut() {
+            for &phys_addr in &task.stack_frames {
+                let frame = PhysFrame::containing_address(PhysAddr::new(phys_addr));
+                alloc.free_frame(frame);
+            }
+        }
+    }
+
+    // Unregister mailbox
+    crate::ipc::message::unregister_mailbox(task.id);
+
+    // Recycle the task ID
+    ID_ALLOCATOR.lock().free(task.id);
+}
+
+/// Task ID allocator with recycling. IDs are reused after tasks die.
+struct IdAllocator {
+    next: u64,
+    free_list: Vec<u64>,
+}
+
+impl IdAllocator {
+    const fn new() -> Self {
+        IdAllocator { next: 1, free_list: Vec::new() }
+    }
+
+    fn alloc(&mut self) -> u64 {
+        if let Some(id) = self.free_list.pop() {
+            id
+        } else {
+            let id = self.next;
+            self.next += 1;
+            id
+        }
+    }
+
+    fn free(&mut self, id: u64) {
+        self.free_list.push(id);
+    }
+}
+
+static ID_ALLOCATOR: spin::Mutex<IdAllocator> = spin::Mutex::new(IdAllocator::new());
 
 impl Task {
     /// Create a new task with a properly mapped, contiguous kernel stack.
@@ -70,12 +123,7 @@ impl Task {
         entry: fn() -> !,
         mapper: &mut OffsetPageTable,
     ) -> Self {
-        let id = {
-            let mut next = NEXT_ID.lock();
-            let current = *next;
-            *next += 1;
-            current
-        };
+        let id = ID_ALLOCATOR.lock().alloc();
 
         // Calculate this task's stack virtual address
         let slot_base = STACK_REGION_BASE + (id as u64) * STACK_SLOT_SIZE;
@@ -88,10 +136,12 @@ impl Task {
             | PageTableFlags::WRITABLE
             | PageTableFlags::NO_EXECUTE;
 
+        let mut stack_frames = Vec::with_capacity(STACK_PAGES as usize);
         for i in 0..STACK_PAGES {
             let page_addr = VirtAddr::new(stack_bottom + i * PAGE_SIZE);
             let page = Page::<Size4KiB>::containing_address(page_addr);
-            paging::alloc_and_map(mapper, page, flags);
+            let frame = paging::alloc_and_map(mapper, page, flags);
+            stack_frames.push(frame.start_address().as_u64());
         }
         // Guard page is intentionally NOT mapped — any access triggers page fault
 
@@ -118,6 +168,7 @@ impl Task {
             priority,
             context,
             stack_top,
+            stack_frames,
             capabilities: Vec::new(),
         }
     }
@@ -152,11 +203,9 @@ impl Task {
 /// then calls the real entry function stored in R12.
 #[unsafe(naked)]
 extern "C" fn task_entry_trampoline() -> ! {
-    unsafe {
-        core::arch::naked_asm!(
-            "sti",          // Enable interrupts
-            "call r12",     // Call the real entry function (stored by Task::new)
-            "ud2",          // Should never return — entry is fn() -> !
-        );
-    }
+    core::arch::naked_asm!(
+        "sti",          // Enable interrupts
+        "call r12",     // Call the real entry function (stored by Task::new)
+        "ud2",          // Should never return — entry is fn() -> !
+    );
 }

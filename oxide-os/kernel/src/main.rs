@@ -94,6 +94,23 @@ extern "C" fn _start() -> ! {
     x86_64::instructions::interrupts::enable();
     println!("[boot] APIC timer running, interrupts enabled");
 
+    // Set up IPC test: create capabilities and spawn tasks that communicate
+    let (sender_cap, receiver_cap) = {
+        use capability::{CAP_TABLE, PermissionBits, ResourceRef};
+        let mut table = CAP_TABLE.lock();
+        // Cap for task 1 (sender) to write to task 2 (receiver)
+        let sc = table.create_root(1, ResourceRef::Agent(2), PermissionBits::WRITE.union(PermissionBits::DELEGATE));
+        // Cap for task 2 (receiver) — can read
+        let rc = table.create_root(2, ResourceRef::Agent(1), PermissionBits::READ);
+        (sc, rc)
+    };
+    let _ = (sender_cap, receiver_cap); // Used by tasks via global knowledge of their IDs
+
+    // Register mailboxes before spawning tasks
+    ipc::message::register_mailbox(1);
+    ipc::message::register_mailbox(2);
+    ipc::message::register_mailbox(3);
+
     // Spawn tasks
     {
         use task::{Task, Priority};
@@ -101,13 +118,13 @@ extern "C" fn _start() -> ! {
         use alloc::string::String;
 
         let mut sched = SCHEDULER.lock();
-        sched.spawn(Task::new(String::from("task-a"), Priority::Normal, task_a, &mut mapper));
-        sched.spawn(Task::new(String::from("task-b"), Priority::Normal, task_b, &mut mapper));
-        sched.spawn(Task::new(String::from("task-c"), Priority::Realtime, task_c, &mut mapper));
+        sched.spawn(Task::new(String::from("sender"), Priority::Normal, task_sender, &mut mapper));
+        sched.spawn(Task::new(String::from("receiver"), Priority::Normal, task_receiver, &mut mapper));
+        sched.spawn(Task::new(String::from("worker"), Priority::Background, task_worker, &mut mapper));
         sched.print_stats();
     }
 
-    println!("[boot] Scheduler active");
+    println!("[boot] Scheduler active — IPC test running");
     println!();
 
     // Idle loop — yields to tasks when reschedule is pending
@@ -119,42 +136,73 @@ extern "C" fn _start() -> ! {
     }
 }
 
-// --- Test Tasks ---
+// --- IPC Test Tasks ---
 
-fn task_a() -> ! {
-    let mut count = 0u64;
+/// Sender task: sends messages to the receiver every ~200 ticks.
+fn task_sender() -> ! {
+    use ipc::{MessageType, message};
+
+    // Get our capability to talk to task 2 (receiver)
+    // Task 1's cap to write to task 2 is cap #1 (created in boot)
+    let my_cap: u64 = 1;
+    let mut msg_count = 0u32;
+
+    // Wait a bit for receiver to start
+    let mut warmup = 0u64;
     loop {
-        count += 1;
-        if count % 1_000_000 == 0 {
-            println!("[task-a] tick={} iterations={}", interrupts::ticks(), count);
+        warmup += 1;
+        if warmup > 500_000 { break; }
+        if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
+    }
+
+    loop {
+        msg_count += 1;
+        let payload = alloc::format!("Hello #{}", msg_count).into_bytes();
+
+        match message::send(1, 2, MessageType::Data, payload, None, None, my_cap) {
+            Ok(msg_id) => {
+                println!("[sender] Sent message #{} (id={}) to receiver", msg_count, msg_id.0);
+            }
+            Err(e) => {
+                println!("[sender] ERROR sending: {:?}", e);
+            }
         }
-        // Cooperative reschedule check — ensures preemption even without true interrupt-return patching
+
+        // Wait ~200 ticks before next message
+        let target = interrupts::ticks() + 200;
+        while interrupts::ticks() < target {
+            if task::scheduler::should_reschedule() { task::scheduler::yield_now(); }
+        }
+    }
+}
+
+/// Receiver task: polls for messages and prints them.
+fn task_receiver() -> ! {
+    use ipc::message;
+
+    let mut received = 0u32;
+
+    loop {
+        // Check for messages
+        if let Some(msg) = message::receive(2) {
+            received += 1;
+            let text = core::str::from_utf8(&msg.payload).unwrap_or("<binary>");
+            println!("[receiver] Got message from task {}: \"{}\" (total: {})", msg.sender, text, received);
+        }
+
         if task::scheduler::should_reschedule() {
             task::scheduler::yield_now();
         }
     }
 }
 
-fn task_b() -> ! {
+/// Background worker — just counts to prove Background priority works.
+fn task_worker() -> ! {
     let mut count = 0u64;
     loop {
         count += 1;
-        if count % 1_000_000 == 0 {
-            println!("[task-b] tick={} iterations={}", interrupts::ticks(), count);
-        }
-        if task::scheduler::should_reschedule() {
-            task::scheduler::yield_now();
-        }
-    }
-}
-
-/// Realtime priority task — should run before Normal tasks when both are ready.
-fn task_c() -> ! {
-    let mut count = 0u64;
-    loop {
-        count += 1;
-        if count % 2_000_000 == 0 {
-            println!("[task-c RT] tick={} iterations={}", interrupts::ticks(), count);
+        if count % 5_000_000 == 0 {
+            println!("[worker BG] tick={} alive, iterations={}", interrupts::ticks(), count);
         }
         if task::scheduler::should_reschedule() {
             task::scheduler::yield_now();
