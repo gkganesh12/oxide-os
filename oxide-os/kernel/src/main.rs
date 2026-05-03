@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+mod gdt;
+mod serial;
+
 use core::panic::PanicInfo;
 use limine::BaseRevision;
 use limine::request::{HhdmRequest, MemmapRequest, StackSizeRequest};
@@ -14,10 +17,10 @@ static LIMINE_REQUESTS_START: limine::RequestsStartMarker = limine::RequestsStar
 #[unsafe(link_section = ".limine_requests_end")]
 static LIMINE_REQUESTS_END: limine::RequestsEndMarker = limine::RequestsEndMarker::new();
 
-/// Base revision: request revision 3 (latest stable).
+/// Base revision: request revision 3 (supported by Limine v8).
 #[used]
 #[unsafe(link_section = ".limine_requests")]
-static BASE_REVISION: BaseRevision = BaseRevision::new();
+static BASE_REVISION: BaseRevision = BaseRevision::with_revision(3);
 
 /// Request a 64 KiB stack.
 #[used]
@@ -43,10 +46,45 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    // Verify the bootloader supports our requested base revision.
-    assert!(BASE_REVISION.is_supported());
+    // Write to QEMU debug exit port to confirm kernel entry
+    unsafe {
+        core::arch::asm!("out dx, al", in("dx") 0xf4u16, in("al") 0x21u8);
+    }
 
-    // Kernel booted successfully via Limine. Halt.
+    // Initialize serial output first so we can print diagnostics.
+    serial::init();
+
+    println!("=== Oxide OS v0.1.0 ===");
+
+    // Verify the bootloader supports our requested base revision.
+    if !BASE_REVISION.is_supported() {
+        println!("[boot] ERROR: Limine base revision not supported!");
+        hcf();
+    }
+    println!("[boot] Limine base revision supported.");
+
+    gdt::init();
+    println!("[boot] GDT initialized.");
+
+    // Print memory map information.
+    if let Some(response) = MEMMAP_REQUEST.response() {
+        let entries = response.entries();
+        let mut usable_bytes: u64 = 0;
+        for entry in entries {
+            if entry.type_ == limine::memmap::MEMMAP_USABLE {
+                usable_bytes += entry.length;
+            }
+        }
+        println!(
+            "[boot] Memory map: {} entries, {} MiB usable.",
+            entries.len(),
+            usable_bytes / (1024 * 1024)
+        );
+    } else {
+        println!("[boot] WARNING: No memory map response from bootloader.");
+    }
+
+    println!("[boot] Kernel halted.");
     hcf();
 }
 

@@ -20,15 +20,15 @@ SECTIONS {
     } :rodata
 
     . = ALIGN(4096);
+    .data : {
+        *(.data .data.*)
+    } :data
+
+    . = ALIGN(4096);
     .limine_requests : {
         KEEP(*(.limine_requests_start))
         KEEP(*(.limine_requests))
         KEEP(*(.limine_requests_end))
-    } :rodata
-
-    . = ALIGN(4096);
-    .data : {
-        *(.data .data.*)
     } :data
 
     .bss : {
