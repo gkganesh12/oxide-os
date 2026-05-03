@@ -19,32 +19,52 @@ pub struct FileEntry {
 pub struct OxideFs {
     index: BTreeMap<String, FileEntry>,
     blobs: BTreeMap<BlobId, Vec<u8>>,
+    /// Hash → BlobId for O(1) dedup lookups (FNV-style hash of content)
+    content_hashes: BTreeMap<u64, BlobId>,
     next_blob_id: BlobId,
     total_bytes: u64,
 }
 
 impl OxideFs {
     pub const fn new() -> Self {
-        OxideFs { index: BTreeMap::new(), blobs: BTreeMap::new(), next_blob_id: 1, total_bytes: 0 }
+        OxideFs {
+            index: BTreeMap::new(), blobs: BTreeMap::new(),
+            content_hashes: BTreeMap::new(), next_blob_id: 1, total_bytes: 0,
+        }
+    }
+
+    /// Simple FNV-1a hash for content dedup. Not cryptographic — just fast.
+    fn content_hash(data: &[u8]) -> u64 {
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for &byte in data {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash
     }
 
     pub fn write_file(&mut self, path: &str, data: &[u8]) -> BlobId {
-        // Content-addressable dedup: check if this data already exists
-        for (&id, blob) in &self.blobs {
-            if blob.as_slice() == data {
-                // Reuse existing blob
-                let tick = crate::interrupts::ticks();
-                self.index.insert(String::from(path), FileEntry {
-                    path: String::from(path), blob_id: id, size: data.len() as u64,
-                    created_tick: tick, modified_tick: tick, deleted: false,
-                });
-                return id;
+        let hash = Self::content_hash(data);
+
+        // O(1) dedup via hash lookup
+        if let Some(&existing_id) = self.content_hashes.get(&hash) {
+            // Verify actual content matches (hash collision protection)
+            if let Some(blob) = self.blobs.get(&existing_id) {
+                if blob.as_slice() == data {
+                    let tick = crate::interrupts::ticks();
+                    self.index.insert(String::from(path), FileEntry {
+                        path: String::from(path), blob_id: existing_id, size: data.len() as u64,
+                        created_tick: tick, modified_tick: tick, deleted: false,
+                    });
+                    return existing_id;
+                }
             }
         }
 
         let blob_id = self.next_blob_id;
         self.next_blob_id += 1;
         self.blobs.insert(blob_id, data.to_vec());
+        self.content_hashes.insert(hash, blob_id);
         self.total_bytes += data.len() as u64;
 
         let tick = crate::interrupts::ticks();

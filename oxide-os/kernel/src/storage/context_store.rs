@@ -1,3 +1,7 @@
+// Lock ordering (must be respected to prevent deadlocks):
+//   CAP_TABLE → STORE → FS
+// Never lock in reverse order.
+
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -41,7 +45,7 @@ impl ContextStore {
     pub fn keys(&self, agent_id: AgentId) -> Vec<String> {
         let prefix = alloc::format!("/agents/{}/", agent_id);
         FS.lock().list(&prefix).iter().map(|e| {
-            e.path.strip_prefix(&prefix as &str).unwrap_or(&e.path).to_string()
+            e.path.strip_prefix(prefix.as_str()).unwrap_or(&e.path).to_string()
         }).collect()
     }
 

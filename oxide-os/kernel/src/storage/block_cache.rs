@@ -1,3 +1,7 @@
+// Lock ordering: CACHE → DEVICE
+// BlockCache methods are called with CACHE locked and may lock DEVICE internally.
+// Never lock DEVICE then CACHE.
+
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use spin::Mutex;
