@@ -1,4 +1,4 @@
-name: Build Kernel
+name: Build & Test Kernel
 
 on:
   push:
@@ -18,10 +18,49 @@ jobs:
           targets: x86_64-unknown-none
           components: rust-src, llvm-tools-preview
 
-      - name: Build kernel
+      - name: Build kernel (debug)
         working-directory: oxide-os
         run: cargo build
 
       - name: Build kernel (release)
         working-directory: oxide-os
         run: cargo build --release
+
+      - name: Check for warnings
+        working-directory: oxide-os
+        run: cargo clippy -- -D warnings -A dead-code -A unused-imports
+        continue-on-error: true
+
+  boot-test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-none
+          components: rust-src, llvm-tools-preview
+
+      - name: Install QEMU and xorriso
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 xorriso
+
+      - name: Build ISO
+        working-directory: oxide-os
+        run: make iso
+
+      - name: Boot test (verify kernel starts)
+        working-directory: oxide-os
+        run: |
+          timeout 10 qemu-system-x86_64 \
+            -cdrom oxide-os.iso \
+            -serial file:boot.log \
+            -no-reboot -no-shutdown \
+            -display none \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 || true
+          echo "--- Boot log ---"
+          cat boot.log
+          grep -q "Oxide OS" boot.log || (echo "FAIL: kernel did not boot" && exit 1)
+          grep -q "Scheduler active" boot.log || (echo "FAIL: scheduler did not start" && exit 1)
+          echo "PASS: kernel booted and scheduler started"
