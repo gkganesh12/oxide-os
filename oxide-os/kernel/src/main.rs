@@ -249,7 +249,7 @@ extern "C" fn _start() -> ! {
                 tools: alloc::vec::Vec::new(),
                 capabilities: alloc::vec::Vec::new(),
                 restart_policy: ManifestRestartPolicy::Permanent,
-                resource_limits: ManifestResourceLimits::default(),
+                resource_limits: ManifestResourceLimits { max_memory_bytes: 16 * 1024 * 1024, max_children: 16 },
                 metadata: None,
             })
             .agent(ManifestAgent {
