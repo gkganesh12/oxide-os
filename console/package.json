@@ -1,0 +1,27 @@
+{
+  "name": "oxide-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bridge": "node server/bridge.js",
+    "broker": "node server/broker/index.js",
+    "broker:test": "node --test server/broker/test/**/*.test.js",
+    "start": "concurrently \"npm run bridge\" \"npm run dev\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "framer-motion": "^12.38.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "ws": "^8.20.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.1.2",
+    "vite": "^8.0.10"
+  }
+}
