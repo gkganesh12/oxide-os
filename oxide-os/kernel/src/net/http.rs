@@ -85,7 +85,7 @@ pub fn get(url: &str, task_id: TaskId, net_cap: CapId) -> Result<HttpResponse, H
     // Receive response
     let mut response_bytes = Vec::new();
     let mut buf = [0u8; 4096];
-    let recv_deadline = crate::interrupts::ticks() + 1000;
+    let recv_deadline = crate::interrupts::ticks() + 5000;
     loop {
         super::stack::poll();
         match super::socket::tcp_receive(handle, &mut buf) {
@@ -179,7 +179,7 @@ pub fn post(url: &str, body: &[u8], task_id: TaskId, net_cap: CapId) -> Result<H
     // Receive response
     let mut response_bytes = Vec::new();
     let mut buf = [0u8; 4096];
-    let recv_deadline = crate::interrupts::ticks() + 1000;
+    let recv_deadline = crate::interrupts::ticks() + 5000;
     loop {
         super::stack::poll();
         match super::socket::tcp_receive(handle, &mut buf) {

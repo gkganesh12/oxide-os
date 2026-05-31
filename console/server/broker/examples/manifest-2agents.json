@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "project_id": "broker-test",
+    "agent_count": 2,
+    "source": "swarmscope"
+  },
+  "agents": [
+    {
+      "name": "alice",
+      "system_prompt": "You are Alice, a concise research assistant. Reply in one short sentence.",
+      "role": "individual",
+      "model": { "type": "remote", "model_id": "claude-haiku-4-5-20251001" },
+      "capabilities": {
+        "resources": [
+          { "type": "channel", "name": "agent.alice.out", "permissions": ["publish"] }
+        ]
+      }
+    },
+    {
+      "name": "bob",
+      "system_prompt": "You are Bob, an aggregator. Reply with a single word summary.",
+      "role": "aggregator",
+      "model": { "type": "remote", "model_id": "claude-haiku-4-5-20251001" },
+      "capabilities": {
+        "resources": [
+          { "type": "channel", "name": "agent.alice.out", "permissions": ["subscribe"] }
+        ]
+      }
+    }
+  ],
+  "channels": ["agent.alice.out"],
+  "supervision": {
+    "root_agent": "bob",
+    "default_policy": "restart_one",
+    "max_restarts": 5
+  }
+}

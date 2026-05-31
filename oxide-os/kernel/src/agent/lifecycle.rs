@@ -3,6 +3,7 @@ use crate::task::{Task, Priority};
 use crate::task::scheduler::SCHEDULER;
 use crate::ipc::message;
 use crate::println;
+use alloc::string::String;
 use x86_64::structures::paging::OffsetPageTable;
 
 /// Spawn a new agent. Creates the underlying task and registers the agent.
@@ -41,6 +42,9 @@ pub fn spawn(
         children: alloc::vec::Vec::new(),
         restart_count: 0,
         max_restarts: 5,
+        broker_cap: None,
+        broker_endpoint: String::new(),
+        publish_cap: None,
     };
 
     REGISTRY.lock().register(agent);

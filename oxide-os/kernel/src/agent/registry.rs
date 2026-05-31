@@ -3,6 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use spin::Mutex;
 use super::{AgentId, AgentState, AgentConfig};
+use crate::capability::CapId;
 use crate::println;
 
 pub struct Agent {
@@ -13,6 +14,9 @@ pub struct Agent {
     pub children: Vec<AgentId>,
     pub restart_count: u32,
     pub max_restarts: u32,
+    pub broker_cap: Option<CapId>,
+    pub broker_endpoint: String,
+    pub publish_cap: Option<CapId>,
 }
 
 pub struct AgentRegistry {

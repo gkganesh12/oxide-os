@@ -32,5 +32,19 @@ pub fn init() {
 }
 
 pub fn resolve(hostname: &str) -> Option<Ipv4Address> {
+    // Dotted-quad shortcut: parse "10.0.2.2" directly instead of cache lookup.
+    if let Some(addr) = parse_dotted_quad(hostname) {
+        return Some(addr);
+    }
     RESOLVER.lock().as_mut()?.resolve(hostname)
+}
+
+fn parse_dotted_quad(s: &str) -> Option<Ipv4Address> {
+    let mut parts = s.split('.');
+    let a: u8 = parts.next()?.parse().ok()?;
+    let b: u8 = parts.next()?.parse().ok()?;
+    let c: u8 = parts.next()?.parse().ok()?;
+    let d: u8 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() { return None; }
+    Some(Ipv4Address::new(a, b, c, d))
 }
