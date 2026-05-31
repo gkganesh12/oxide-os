@@ -329,22 +329,25 @@ fn swarmscope_supervisor_entry() -> ! {
     }
 }
 
-/// Aggregator entry point — collects findings from simulation agents.
+/// Aggregator entry point — collects findings from all agent.<name>.out channels.
+/// Channel publishes are delivered into our mailbox (one Message per publish),
+/// so we drain via the existing message::receive() API.
 fn swarmscope_aggregator_entry() -> ! {
     use crate::interrupts;
 
     let my_id = scheduler::SCHEDULER.lock().current_id() as u64;
-    println!("[swarm-aggregator] Online — collecting simulation data");
+    println!("[swarm-aggregator] online — draining inbox for agent.*.out publishes");
     let mut total = 0u32;
 
     loop {
         while let Some(msg) = message::receive(my_id) {
             total += 1;
-            if total % 20 == 0 {
-                println!(
-                    "[swarm-aggregator] {} messages collected (latest from agent {})",
-                    total, msg.sender
-                );
+            if let Ok(s) = core::str::from_utf8(&msg.payload) {
+                // Truncate very long lines to keep serial output readable
+                let preview: String = s.chars().take(220).collect();
+                println!("[swarm-aggregator] #{} {}", total, preview);
+            } else {
+                println!("[swarm-aggregator] #{} ({} bytes, non-utf8)", total, msg.payload.len());
             }
         }
 
