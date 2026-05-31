@@ -116,6 +116,61 @@ fn parse_endpoint(endpoint: &str) -> Option<(String, u16)> {
     Some((host, port))
 }
 
+/// For each non-aggregator agent, create channel `agent.<name>.out`,
+/// grant the agent PUBLISH on it, and grant the aggregator SUBSCRIBE on it.
+///
+/// Returns the per-agent publish CapId map so callers can store the publish cap
+/// on the Agent record for later use by the entry function.
+fn setup_agent_channels(
+    manifest: &SwarmManifest,
+    agent_ids: &[(String, AgentId)],
+) -> alloc::collections::BTreeMap<String, CapId> {
+    use alloc::collections::BTreeMap;
+
+    let aggregator_id = agent_ids
+        .iter()
+        .find(|(name, _)| {
+            manifest
+                .agents
+                .iter()
+                .any(|a| a.name == *name && a.role == AgentRole::Aggregator)
+        })
+        .map(|(_, id)| *id);
+
+    let mut publish_caps: BTreeMap<String, CapId> = BTreeMap::new();
+
+    for (agent_name, agent_id) in agent_ids {
+        let agent_def = match manifest.agents.iter().find(|a| a.name == *agent_name) {
+            Some(d) => d,
+            None => continue,
+        };
+        if agent_def.role == AgentRole::Aggregator {
+            continue;
+        }
+
+        let channel_name = alloc::format!("agent.{}.out", agent_name);
+        crate::ipc::channel::create(channel_name.clone());
+
+        let mut table = CAP_TABLE.lock();
+        let pub_cap = table.create_root(
+            *agent_id,
+            ResourceRef::Channel { name: channel_name.clone() },
+            PermissionBits::PUBLISH,
+        );
+        publish_caps.insert(agent_name.clone(), pub_cap);
+
+        if let Some(agg_id) = aggregator_id {
+            table.create_root(
+                agg_id,
+                ResourceRef::Channel { name: channel_name },
+                PermissionBits::SUBSCRIBE,
+            );
+        }
+    }
+
+    publish_caps
+}
+
 /// Generic agent entry point for SwarmScope simulation agents.
 ///
 /// In a full implementation, this would read from the agent's context store
