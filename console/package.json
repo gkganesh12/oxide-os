@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "bridge": "node server/bridge.js",
     "broker": "node server/broker/index.js",
-    "broker:test": "node --test server/broker/test/**/*.test.js",
+    "broker:test": "node --test server/broker/test/",
     "start": "concurrently \"npm run bridge\" \"npm run dev\""
   },
   "dependencies": {
