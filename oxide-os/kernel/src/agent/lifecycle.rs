@@ -44,6 +44,7 @@ pub fn spawn(
         max_restarts: 5,
         broker_cap: None,
         broker_endpoint: String::new(),
+        publish_cap: None,
     };
 
     REGISTRY.lock().register(agent);

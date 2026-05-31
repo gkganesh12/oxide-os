@@ -16,6 +16,7 @@ pub struct Agent {
     pub max_restarts: u32,
     pub broker_cap: Option<CapId>,
     pub broker_endpoint: String,
+    pub publish_cap: Option<CapId>,
 }
 
 pub struct AgentRegistry {

@@ -338,6 +338,12 @@ pub fn spawn_swarm(
     println!("  ╚══════════════════════════════════════════════════╝");
     println!();
 
+    let broker_endpoint: String = manifest
+        .broker_endpoint
+        .clone()
+        .unwrap_or_else(|| String::from(broker::DEFAULT_BROKER_ENDPOINT));
+    println!("[swarmscope] broker endpoint: {}", broker_endpoint);
+
     // 1. Create all IPC channels
     println!("[swarmscope] Creating {} IPC channels...", manifest.channels.len());
     for ch_name in &manifest.channels {
@@ -383,6 +389,36 @@ pub fn spawn_swarm(
                     "[swarmscope] WARNING: Failed to spawn '{}': {}",
                     agent_def.name, e
                 );
+            }
+        }
+    }
+
+    // 4b. Auto-grant broker network cap to each individual/group_rep agent
+    //     and persist endpoint + cap on the registry entry.
+    for (agent_name, agent_id) in &agent_ids {
+        let agent_def = match manifest.agents.iter().find(|a| a.name == *agent_name) {
+            Some(d) => d,
+            None => continue,
+        };
+        if matches!(agent_def.role, AgentRole::Individual | AgentRole::GroupRepresentative) {
+            let cap = auto_grant_broker_cap(*agent_id, &broker_endpoint);
+            let mut reg = agent::registry::REGISTRY.lock();
+            if let Some(a) = reg.get_mut(*agent_id) {
+                a.broker_cap = cap;
+                a.broker_endpoint = broker_endpoint.clone();
+            }
+        }
+    }
+
+    // 4c. Setup per-agent pub/sub channels (agent.<name>.out) and grant caps.
+    let publish_caps = setup_agent_channels(manifest, &agent_ids);
+
+    // 4d. Store publish caps on the registry entries so the agent entry can use them.
+    for (agent_name, cap_id) in &publish_caps {
+        if let Some((_, agent_id)) = agent_ids.iter().find(|(n, _)| n == agent_name) {
+            let mut reg = agent::registry::REGISTRY.lock();
+            if let Some(a) = reg.get_mut(*agent_id) {
+                a.publish_cap = Some(*cap_id);
             }
         }
     }
