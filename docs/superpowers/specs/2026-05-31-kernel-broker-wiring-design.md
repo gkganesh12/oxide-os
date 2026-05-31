@@ -61,7 +61,9 @@ This is the "production-shaped" cut: real network capabilities, explicit channel
 3. **POST** — `net::http::post(url, body, task_id, broker_cap)` returns `Result<HttpResponse, HttpError>`.
 4. **Parse** — `HttpResponse.body` is JSON; extract `text`, `usage.input_tokens`, `usage.output_tokens`. (Minimal `find`-based parser; no serde dep in this hot path — alternatively use the existing `serde_json_core` if already in the kernel dependency tree.)
 5. **Publish** — `ipc::channel::publish("agent.<name>.out", payload)` where payload = JSON `{"agent","round","text","tokens_in","tokens_out","elapsed_ms"}`.
-6. **Sleep** — `sleep_ticks(round_delay)`, loop.
+6. **Sleep** — `sleep_ticks(2000)` (~2s), loop.
+
+The per-round user prompt is intentionally simple (`"Round N. What do you observe?"`) — the *persona* lives in the system prompt on the broker side (cached). Round number alone is enough for the LLM to produce varied output because each call replays the conversation history, so the agent's prior thoughts feed the next round. This keeps the kernel free of per-agent prompt logic; SwarmScope manifests fully define behavior via system prompt.
 
 ## Components
 
@@ -132,7 +134,7 @@ fn swarmscope_agent_entry() -> ! {
             continue;
         }
 
-        let prompt = build_round_prompt(&name, round);  // round-specific prompt
+        let prompt = format!("Round {}. What do you observe?", round);
         let start = interrupts::ticks();
         match broker::post_infer(&endpoint, &name, &prompt, my_id, broker_cap) {
             Ok(reply) => {
