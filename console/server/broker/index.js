@@ -30,8 +30,9 @@ const client = new Anthropic({ apiKey })
 const registry = AgentRegistry.fromManifest(manifest, client)
 const handler = createHandler(registry)
 
-createServer(handler).listen(PORT, () => {
-  console.log(`[broker] listening on http://127.0.0.1:${PORT}`)
+const HOST = process.env.BROKER_HOST ?? '0.0.0.0'
+createServer(handler).listen(PORT, HOST, () => {
+  console.log(`[broker] listening on http://${HOST}:${PORT}`)
   console.log(`[broker] manifest: ${MANIFEST_PATH}`)
   console.log(`[broker] provisioned agents (${registry.size}): ${registry.list().map((a) => a.name).join(', ')}`)
 })
