@@ -20,6 +20,7 @@ mod qemu;
 mod serial;
 mod crypto;
 mod storage;
+mod swarmscope;
 mod syscall;
 mod task;
 mod timer;
@@ -226,6 +227,82 @@ extern "C" fn _start() -> ! {
         };
         agent::lifecycle::spawn(Some(1), aggregator_config, agent_aggregator, &mut mapper)
             .expect("failed to spawn aggregator");
+    }
+
+    // 4b. SwarmScope-managed agents (real Claude through host broker on :3101)
+    {
+        use swarmscope::loader::spawn_swarm;
+        use swarmscope::manifest::{
+            ManifestAgent, ManifestBuilder, ManifestModel, ManifestRestartPolicy,
+            ManifestResourceLimits, AgentRole,
+        };
+
+        let manifest = ManifestBuilder::new()
+            .project_id(alloc::string::String::from("oxide-broker-demo"))
+            .broker_endpoint(alloc::string::String::from("http://10.0.2.2:3101"))
+            .agent(ManifestAgent {
+                name: alloc::string::String::from("swarm-supervisor"),
+                system_prompt: alloc::string::String::from("Supervise the swarm."),
+                bio: alloc::string::String::from("Supervisor agent"),
+                role: AgentRole::Supervisor,
+                model: ManifestModel::Auto { preference: alloc::vec![alloc::string::String::from("local")] },
+                tools: alloc::vec::Vec::new(),
+                capabilities: alloc::vec::Vec::new(),
+                restart_policy: ManifestRestartPolicy::Permanent,
+                resource_limits: ManifestResourceLimits::default(),
+                metadata: None,
+            })
+            .agent(ManifestAgent {
+                name: alloc::string::String::from("alice"),
+                system_prompt: alloc::string::String::from(
+                    "You are Alice, a concise research assistant. Reply in one short sentence."
+                ),
+                bio: alloc::string::String::from("Research assistant"),
+                role: AgentRole::Individual,
+                model: ManifestModel::Remote {
+                    endpoint: alloc::string::String::from("http://10.0.2.2:3101")
+                },
+                tools: alloc::vec::Vec::new(),
+                capabilities: alloc::vec::Vec::new(),
+                restart_policy: ManifestRestartPolicy::RestartOne,
+                resource_limits: ManifestResourceLimits::default(),
+                metadata: None,
+            })
+            .agent(ManifestAgent {
+                name: alloc::string::String::from("bob"),
+                system_prompt: alloc::string::String::from(
+                    "You are Bob, an aggregator. Reply with a single word summary."
+                ),
+                bio: alloc::string::String::from("Aggregator assistant"),
+                role: AgentRole::Individual,
+                model: ManifestModel::Remote {
+                    endpoint: alloc::string::String::from("http://10.0.2.2:3101")
+                },
+                tools: alloc::vec::Vec::new(),
+                capabilities: alloc::vec::Vec::new(),
+                restart_policy: ManifestRestartPolicy::RestartOne,
+                resource_limits: ManifestResourceLimits::default(),
+                metadata: None,
+            })
+            .agent(ManifestAgent {
+                name: alloc::string::String::from("swarm-aggregator"),
+                system_prompt: alloc::string::String::from("Collect agent outputs."),
+                bio: alloc::string::String::from("Aggregator agent"),
+                role: AgentRole::Aggregator,
+                model: ManifestModel::Auto { preference: alloc::vec![alloc::string::String::from("local")] },
+                tools: alloc::vec::Vec::new(),
+                capabilities: alloc::vec::Vec::new(),
+                restart_policy: ManifestRestartPolicy::RestartOne,
+                resource_limits: ManifestResourceLimits::default(),
+                metadata: None,
+            })
+            .build();
+
+        match spawn_swarm(&manifest, &mut mapper) {
+            Ok(r) => println!("[main] swarmscope: spawned {} agents, {} channels, {} caps",
+                r.agent_ids.len(), r.channel_count, r.cap_count),
+            Err(e) => println!("[main] swarmscope: spawn_swarm failed: {}", e),
+        }
     }
 
     // 5. Print the agent tree
