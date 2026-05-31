@@ -1,0 +1,419 @@
+//! SwarmScope manifest loader.
+//!
+//! Takes a SwarmManifest and spawns the entire agent swarm on the Oxide OS
+//! kernel — creating capabilities, IPC channels, mailboxes, and the
+//! supervision tree.
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use x86_64::structures::paging::OffsetPageTable;
+
+use super::manifest::*;
+use super::broker;
+use crate::agent::{self, AgentConfig, AgentId, ModelBinding, ResourceLimits, RestartPolicy};
+use crate::capability::{CAP_TABLE, CapId, PermissionBits, ResourceRef};
+use crate::ipc::{channel, message, MessageType};
+use crate::println;
+use crate::task::scheduler;
+
+/// Result of spawning a swarm from a manifest.
+pub struct SwarmSpawnResult {
+    pub supervisor_id: AgentId,
+    pub agent_ids: Vec<(String, AgentId)>,
+    pub channel_count: usize,
+    pub cap_count: usize,
+}
+
+/// Convert manifest permissions to kernel PermissionBits.
+fn to_permission_bits(perms: &[Permission]) -> PermissionBits {
+    let mut bits = PermissionBits::NONE;
+    for p in perms {
+        bits = bits.union(match p {
+            Permission::Read => PermissionBits::READ,
+            Permission::Write => PermissionBits::WRITE,
+            Permission::Execute => PermissionBits::EXECUTE,
+            Permission::Delegate => PermissionBits::DELEGATE,
+            Permission::Spawn => PermissionBits::SPAWN,
+            Permission::Kill => PermissionBits::KILL,
+            Permission::Subscribe => PermissionBits::SUBSCRIBE,
+            Permission::Publish => PermissionBits::PUBLISH,
+            Permission::Connect => PermissionBits::CONNECT,
+        });
+    }
+    bits
+}
+
+/// Convert manifest resource to kernel ResourceRef.
+fn to_resource_ref(res: &ManifestResource) -> ResourceRef {
+    match res {
+        ManifestResource::Channel { name } => ResourceRef::Channel { name: name.clone() },
+        ManifestResource::Network { host, port } => ResourceRef::Network {
+            host: host.clone(),
+            port: *port,
+        },
+        ManifestResource::Storage { path } => ResourceRef::Storage { path: path.clone() },
+        ManifestResource::Tool { name } => ResourceRef::Tool { name: name.clone() },
+        ManifestResource::Model { model_id } => ResourceRef::Model {
+            model_id: model_id.clone(),
+        },
+        ManifestResource::Agent { agent_id } => ResourceRef::Agent(*agent_id),
+        ManifestResource::AgentSpawn => ResourceRef::AgentSpawn,
+    }
+}
+
+/// Convert manifest model to kernel ModelBinding.
+fn to_model_binding(model: &ManifestModel) -> ModelBinding {
+    match model {
+        ManifestModel::Local { model_id } => ModelBinding::Local {
+            model_id: model_id.clone(),
+        },
+        ManifestModel::Remote { endpoint } => ModelBinding::Remote {
+            endpoint: endpoint.clone(),
+            api_key_cap: 0,
+        },
+        ManifestModel::Auto { preference } => ModelBinding::Auto {
+            preference: preference.clone(),
+        },
+    }
+}
+
+/// Convert manifest restart policy to kernel RestartPolicy.
+fn to_restart_policy(policy: ManifestRestartPolicy) -> RestartPolicy {
+    match policy {
+        ManifestRestartPolicy::RestartOne => RestartPolicy::RestartOne,
+        ManifestRestartPolicy::RestartAll => RestartPolicy::RestartAll,
+        ManifestRestartPolicy::Escalate => RestartPolicy::Escalate,
+        ManifestRestartPolicy::Permanent => RestartPolicy::Permanent,
+    }
+}
+
+/// Auto-grant a network capability targeting the broker to the given agent.
+/// Returns the CapId. Idempotent only in the sense that calling twice creates two caps.
+fn auto_grant_broker_cap(agent_id: AgentId, endpoint: &str) -> Option<CapId> {
+    let (host, port) = parse_endpoint(endpoint)?;
+    let resource = ResourceRef::Network { host, port };
+    let cap_id = CAP_TABLE
+        .lock()
+        .create_root(agent_id, resource, PermissionBits::CONNECT);
+    Some(cap_id)
+}
+
+/// Parse "http://host:port" → ("host", port). Returns None on malformed input.
+/// Ignores path component. Defaults port to 80 if absent.
+fn parse_endpoint(endpoint: &str) -> Option<(String, u16)> {
+    let stripped = endpoint
+        .strip_prefix("http://")
+        .or_else(|| endpoint.strip_prefix("https://"))
+        .unwrap_or(endpoint);
+    let host_port = stripped.split('/').next()?;
+    let (host, port) = match host_port.find(':') {
+        Some(i) => {
+            let port: u16 = host_port[i + 1..].parse().ok()?;
+            (String::from(&host_port[..i]), port)
+        }
+        None => (String::from(host_port), 80u16),
+    };
+    Some((host, port))
+}
+
+/// Generic agent entry point for SwarmScope simulation agents.
+///
+/// In a full implementation, this would read from the agent's context store
+/// to get its persona and participate in the simulation loop. For now it
+/// demonstrates the IPC pattern: agents publish to their platform channel
+/// and report findings.
+fn swarmscope_agent_entry() -> ! {
+    use crate::interrupts;
+
+    // Get our task ID from the scheduler
+    let my_id = scheduler::SCHEDULER.lock().current_id() as u64;
+
+    // Brief stagger so agents don't all start at the same tick
+    let stagger = (my_id as u64 % 8) * 50;
+    let target = crate::interrupts::ticks() + stagger;
+    while crate::interrupts::ticks() < target {
+        if scheduler::should_reschedule() {
+            scheduler::yield_now();
+        }
+    }
+
+    println!("[swarm-agent:{}] Online — entering simulation loop", my_id);
+    let mut round = 0u32;
+
+    loop {
+        round += 1;
+
+        // Simulate agent action: produce a finding/post
+        let payload = alloc::format!(
+            "{{\"agent_id\":{},\"round\":{},\"action\":\"social_post\"}}",
+            my_id, round
+        )
+        .into_bytes();
+
+        // Try to send to aggregator (best-effort, finds any agent named aggregator)
+        // In the full implementation this would go through pub/sub channels
+        if let Some(aggregator_id) = agent::registry::REGISTRY.lock().find_by_name("swarm-aggregator") {
+            let _ = message::send(
+                my_id,
+                aggregator_id,
+                MessageType::Data,
+                payload,
+                None,
+                None,
+                0, // Cap 0 = unchecked in demo mode
+            );
+        }
+
+        if round % 10 == 0 {
+            println!("[swarm-agent:{}] Completed {} rounds", my_id, round);
+        }
+
+        // Simulate thinking time between rounds
+        let delay = 200 + (my_id as u64 % 5) * 50;
+        let target = crate::interrupts::ticks() + delay;
+        while crate::interrupts::ticks() < target {
+            if scheduler::should_reschedule() {
+                scheduler::yield_now();
+            }
+        }
+    }
+}
+
+/// Supervisor entry point — monitors the swarm.
+fn swarmscope_supervisor_entry() -> ! {
+    println!("[swarm-supervisor] Online — monitoring SwarmScope swarm");
+    let mut report_num = 0u32;
+
+    loop {
+        let target = crate::interrupts::ticks() + 500;
+        while crate::interrupts::ticks() < target {
+            if scheduler::should_reschedule() {
+                scheduler::yield_now();
+            }
+        }
+
+        report_num += 1;
+        let agent_count = agent::registry::REGISTRY.lock().count();
+        let task_count = scheduler::SCHEDULER.lock().task_count();
+        println!(
+            "[swarm-supervisor] Report #{}: {} agents, {} tasks, tick={}",
+            report_num,
+            agent_count,
+            task_count,
+            crate::interrupts::ticks()
+        );
+    }
+}
+
+/// Aggregator entry point — collects findings from simulation agents.
+fn swarmscope_aggregator_entry() -> ! {
+    use crate::interrupts;
+
+    let my_id = scheduler::SCHEDULER.lock().current_id() as u64;
+    println!("[swarm-aggregator] Online — collecting simulation data");
+    let mut total = 0u32;
+
+    loop {
+        while let Some(msg) = message::receive(my_id) {
+            total += 1;
+            if total % 20 == 0 {
+                println!(
+                    "[swarm-aggregator] {} messages collected (latest from agent {})",
+                    total, msg.sender
+                );
+            }
+        }
+
+        if scheduler::should_reschedule() {
+            scheduler::yield_now();
+        }
+    }
+}
+
+/// Reporter entry point — generates analysis.
+fn swarmscope_reporter_entry() -> ! {
+    use crate::interrupts;
+
+    println!("[swarm-reporter] Online — will generate reports when data available");
+
+    loop {
+        let target = crate::interrupts::ticks() + 2000;
+        while crate::interrupts::ticks() < target {
+            if scheduler::should_reschedule() {
+                scheduler::yield_now();
+            }
+        }
+        println!("[swarm-reporter] Report cycle — awaiting aggregated data");
+    }
+}
+
+/// Select the entry function based on agent role.
+fn entry_for_role(role: AgentRole) -> fn() -> ! {
+    match role {
+        AgentRole::Supervisor => swarmscope_supervisor_entry,
+        AgentRole::Aggregator => swarmscope_aggregator_entry,
+        AgentRole::Reporter => swarmscope_reporter_entry,
+        AgentRole::Individual | AgentRole::GroupRepresentative => swarmscope_agent_entry,
+    }
+}
+
+/// Spawn an entire agent swarm from a SwarmManifest.
+///
+/// This is the main integration point. It:
+/// 1. Creates all IPC channels
+/// 2. Creates capability entries for each agent
+/// 3. Spawns the supervisor, then all child agents under it
+/// 4. Registers mailboxes for IPC
+pub fn spawn_swarm(
+    manifest: &SwarmManifest,
+    mapper: &mut OffsetPageTable,
+) -> Result<SwarmSpawnResult, &'static str> {
+    println!();
+    println!("  ╔══════════════════════════════════════════════════╗");
+    println!("  ║     SwarmScope -> Oxide OS Agent Loader          ║");
+    println!("  ╠══════════════════════════════════════════════════╣");
+    if let Some(ref pid) = manifest.project_id {
+        println!("  ║  Project:  {:<37} ║", pid);
+    }
+    if let Some(ref gid) = manifest.graph_id {
+        println!("  ║  Graph:    {:<37} ║", gid);
+    }
+    println!("  ║  Agents:   {:<37} ║", manifest.agent_count);
+    println!("  ║  Channels: {:<37} ║", manifest.channels.len());
+    println!("  ╚══════════════════════════════════════════════════╝");
+    println!();
+
+    // 1. Create all IPC channels
+    println!("[swarmscope] Creating {} IPC channels...", manifest.channels.len());
+    for ch_name in &manifest.channels {
+        channel::create(ch_name.clone());
+    }
+
+    // 2. Find the supervisor agent
+    let supervisor_idx = manifest
+        .agents
+        .iter()
+        .position(|a| a.role == AgentRole::Supervisor)
+        .ok_or("manifest has no supervisor agent")?;
+
+    // 3. Create capabilities and spawn the supervisor first
+    let sup_agent = &manifest.agents[supervisor_idx];
+    let sup_task_id = spawn_manifest_agent(sup_agent, None, mapper)?;
+
+    let mut agent_ids = Vec::new();
+    agent_ids.push((sup_agent.name.clone(), sup_task_id));
+
+    // 4. Spawn all other agents as children of the supervisor
+    let mut cap_count = 0;
+    for (idx, agent_def) in manifest.agents.iter().enumerate() {
+        if idx == supervisor_idx {
+            continue;
+        }
+
+        match spawn_manifest_agent(agent_def, Some(sup_task_id), mapper) {
+            Ok(agent_id) => {
+                agent_ids.push((agent_def.name.clone(), agent_id));
+
+                // Create capabilities for this agent
+                let mut table = CAP_TABLE.lock();
+                for cap_def in &agent_def.capabilities {
+                    let resource = to_resource_ref(&cap_def.resource);
+                    let perms = to_permission_bits(&cap_def.permissions);
+                    table.create_root(agent_id, resource, perms);
+                    cap_count += 1;
+                }
+            }
+            Err(e) => {
+                println!(
+                    "[swarmscope] WARNING: Failed to spawn '{}': {}",
+                    agent_def.name, e
+                );
+            }
+        }
+    }
+
+    // 5. Print the supervision tree
+    println!();
+    println!("[swarmscope] Agent supervision tree:");
+    agent::registry::REGISTRY.lock().print_tree();
+
+    // 6. Print summary
+    println!();
+    println!(
+        "[swarmscope] Swarm loaded: {} agents, {} channels, {} capabilities",
+        agent_ids.len(),
+        manifest.channels.len(),
+        cap_count
+    );
+
+    // Print SwarmScope metadata for simulation agents
+    let sim_agents: Vec<&ManifestAgent> = manifest
+        .agents
+        .iter()
+        .filter(|a| a.metadata.is_some())
+        .collect();
+    if !sim_agents.is_empty() {
+        println!();
+        println!("[swarmscope] Simulation agents ({}):", sim_agents.len());
+        for a in &sim_agents {
+            if let Some(ref meta) = a.metadata {
+                let entity_type = meta
+                    .source_entity_type
+                    .as_deref()
+                    .unwrap_or("unknown");
+                let profession = meta.profession.as_deref().unwrap_or("-");
+                println!(
+                    "  {} [{}] {} age:{} prof:{}",
+                    a.name,
+                    entity_type,
+                    a.role_str(),
+                    meta.age.unwrap_or(0),
+                    profession
+                );
+            }
+        }
+    }
+
+    Ok(SwarmSpawnResult {
+        supervisor_id: sup_task_id,
+        agent_ids,
+        channel_count: manifest.channels.len(),
+        cap_count,
+    })
+}
+
+/// Spawn a single agent from a manifest definition.
+fn spawn_manifest_agent(
+    agent_def: &ManifestAgent,
+    parent_id: Option<AgentId>,
+    mapper: &mut OffsetPageTable,
+) -> Result<AgentId, &'static str> {
+    let config = AgentConfig {
+        name: agent_def.name.clone(),
+        system_prompt: Some(agent_def.system_prompt.clone()),
+        model: to_model_binding(&agent_def.model),
+        tools: agent_def.tools.clone(),
+        capabilities: Vec::new(), // Caps created separately via CAP_TABLE
+        restart_policy: to_restart_policy(agent_def.restart_policy),
+        resource_limits: ResourceLimits {
+            max_memory_bytes: agent_def.resource_limits.max_memory_bytes,
+            max_children: agent_def.resource_limits.max_children,
+        },
+    };
+
+    let entry = entry_for_role(agent_def.role);
+    agent::lifecycle::spawn(parent_id, config, entry, mapper)
+}
+
+// Helper for ManifestAgent display
+impl ManifestAgent {
+    pub fn role_str(&self) -> &'static str {
+        match self.role {
+            AgentRole::Supervisor => "supervisor",
+            AgentRole::Individual => "individual",
+            AgentRole::GroupRepresentative => "group-rep",
+            AgentRole::Aggregator => "aggregator",
+            AgentRole::Reporter => "reporter",
+        }
+    }
+}
