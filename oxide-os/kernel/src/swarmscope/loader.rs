@@ -173,65 +173,134 @@ fn setup_agent_channels(
 
 /// Generic agent entry point for SwarmScope simulation agents.
 ///
-/// In a full implementation, this would read from the agent's context store
-/// to get its persona and participate in the simulation loop. For now it
-/// demonstrates the IPC pattern: agents publish to their platform channel
-/// and report findings.
+/// Each round: look up own name + caps + broker endpoint, POST to broker,
+/// publish the parsed reply onto agent.<name>.out for the aggregator.
 fn swarmscope_agent_entry() -> ! {
     use crate::interrupts;
 
-    // Get our task ID from the scheduler
     let my_id = scheduler::SCHEDULER.lock().current_id() as u64;
 
-    // Brief stagger so agents don't all start at the same tick
+    // Brief stagger so agents don't all hit the broker at the same tick
     let stagger = (my_id as u64 % 8) * 50;
-    let target = crate::interrupts::ticks() + stagger;
-    while crate::interrupts::ticks() < target {
+    let target = interrupts::ticks() + stagger;
+    while interrupts::ticks() < target {
         if scheduler::should_reschedule() {
             scheduler::yield_now();
         }
     }
 
-    println!("[swarm-agent:{}] Online — entering simulation loop", my_id);
+    // Snapshot what we need from the registry under one lock
+    let (name, broker_cap, broker_endpoint, publish_cap) = {
+        let reg = agent::registry::REGISTRY.lock();
+        match reg.get(my_id) {
+            Some(a) => (
+                a.config.name.clone(),
+                a.broker_cap,
+                a.broker_endpoint.clone(),
+                a.publish_cap,
+            ),
+            None => {
+                println!("[swarm-agent:{}] not in registry — exiting", my_id);
+                loop { scheduler::yield_now(); }
+            }
+        }
+    };
+
+    let broker_cap = match broker_cap {
+        Some(c) => c,
+        None => {
+            println!("[swarm-agent:{}] no broker cap — idling", name);
+            loop { scheduler::yield_now(); }
+        }
+    };
+
+    let publish_channel = alloc::format!("agent.{}.out", name);
+    println!(
+        "[swarm-agent:{}] online — broker={} channel={}",
+        name, broker_endpoint, publish_channel
+    );
+
     let mut round = 0u32;
+    let mut consecutive_failures = 0u32;
+    let mut backoff_until: u64 = 0;
 
     loop {
         round += 1;
 
-        // Simulate agent action: produce a finding/post
-        let payload = alloc::format!(
-            "{{\"agent_id\":{},\"round\":{},\"action\":\"social_post\"}}",
-            my_id, round
-        )
-        .into_bytes();
-
-        // Try to send to aggregator (best-effort, finds any agent named aggregator)
-        // In the full implementation this would go through pub/sub channels
-        if let Some(aggregator_id) = agent::registry::REGISTRY.lock().find_by_name("swarm-aggregator") {
-            let _ = message::send(
-                my_id,
-                aggregator_id,
-                MessageType::Data,
-                payload,
-                None,
-                None,
-                0, // Cap 0 = unchecked in demo mode
-            );
+        if interrupts::ticks() < backoff_until {
+            let target = interrupts::ticks() + 100;
+            while interrupts::ticks() < target {
+                if scheduler::should_reschedule() {
+                    scheduler::yield_now();
+                }
+            }
+            continue;
         }
 
-        if round % 10 == 0 {
-            println!("[swarm-agent:{}] Completed {} rounds", my_id, round);
+        let prompt = alloc::format!("Round {}. What do you observe?", round);
+        let start = interrupts::ticks();
+
+        match broker::post_infer(&broker_endpoint, &name, &prompt, my_id, broker_cap) {
+            Ok(reply) => {
+                consecutive_failures = 0;
+                let elapsed = interrupts::ticks().saturating_sub(start);
+                let payload = alloc::format!(
+                    "{{\"agent\":\"{}\",\"round\":{},\"text\":\"{}\",\"tokens_in\":{},\"tokens_out\":{},\"elapsed_ticks\":{}}}",
+                    name,
+                    round,
+                    escape_for_log(&reply.text),
+                    reply.tokens_in,
+                    reply.tokens_out,
+                    elapsed
+                ).into_bytes();
+
+                if let Some(pcap) = publish_cap {
+                    if let Err(e) = crate::ipc::channel::publish(&publish_channel, my_id, payload, pcap) {
+                        println!("[swarm-agent:{}] publish failed: {:?}", name, e);
+                    }
+                }
+
+                if round % 5 == 0 {
+                    println!(
+                        "[swarm-agent:{}] round={} tokens_in={} tokens_out={} elapsed_ticks={}",
+                        name, round, reply.tokens_in, reply.tokens_out, elapsed
+                    );
+                }
+            }
+            Err(e) => {
+                println!("[swarm-agent:{}] infer failed: {:?}", name, e);
+                consecutive_failures += 1;
+                if consecutive_failures >= 3 {
+                    backoff_until = interrupts::ticks() + 10000;
+                    println!("[swarm-agent:{}] entering slow-poll (10s)", name);
+                }
+            }
         }
 
-        // Simulate thinking time between rounds
-        let delay = 200 + (my_id as u64 % 5) * 50;
-        let target = crate::interrupts::ticks() + delay;
-        while crate::interrupts::ticks() < target {
+        // Sleep ~2s between rounds
+        let target = interrupts::ticks() + 2000;
+        while interrupts::ticks() < target {
             if scheduler::should_reschedule() {
                 scheduler::yield_now();
             }
         }
     }
+}
+
+/// Replace control chars and quotes for safe embedding in a log payload.
+fn escape_for_log(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push(' '),
+            '\r' => {}
+            c if (c as u32) < 0x20 => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// Supervisor entry point — monitors the swarm.
